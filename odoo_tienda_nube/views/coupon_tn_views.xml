@@ -61,7 +61,9 @@
         <field name="model">coupon.tn</field>
         <field name="arch" type="xml">
             <search>
-                <filter string="Tipo" name="group_by_type_tn" domain="[]" context="{'group_by':'type_tn'}"/>
+                <group expand="1" string="Group By">
+                    <filter string="Tipo" name="type_tn" domain="[]" context="{'group_by':'type_tn'}"/>
+                </group>
             </search>
         </field>
     </record>
