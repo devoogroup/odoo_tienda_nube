@@ -79,9 +79,9 @@ odoo_tienda_nube/
 
 ## Instalación
 
-1. **Requisitos**
-   - Odoo 15/16/17/18/19 (instalar la versión del módulo correspondiente a tu versión).
-   - Python: `requests`, `Pillow`.
+1. **Requisitos**  
+   - Odoo 15/16/17/18/19 (instalar la versión del módulo correspondiente a tu versión).  
+   - Python: `requests`, `Pillow`.  
    - Usuario con permisos de configuración en Odoo.
 
 2. **Cargar el módulo** en la carpeta de addons y **actualizar lista de aplicaciones**.  

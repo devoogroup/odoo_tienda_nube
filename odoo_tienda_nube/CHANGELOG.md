@@ -6,6 +6,10 @@
 - Se agrega `_description` faltante en el modelo `category.tn`.
 - Actualización de documentación (README) para reflejar compatibilidad con Odoo 19.
 
+## [18.0.7.0.0] - 2026-01-22
+### Added
+- Asociación de compañía en categorías y cupones.Reglas específicas para el manejo multicompañía en ambos casos.
+
 ## [18.0.6.0.0] - 2025-12-31
 ### Fixed
 - Se modifica algorimo de actualización de precios para evitar el límite de solicitudes de Tienda Nube al realizar actualizaciones masivas.
