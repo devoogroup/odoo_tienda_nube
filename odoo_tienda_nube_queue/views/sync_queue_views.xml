@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Tree View -->
+    <record id="view_tiendanube_sync_queue_tree" model="ir.ui.view">
+        <field name="name">tiendanube.sync.queue.tree</field>
+        <field name="model">tiendanube.sync.queue</field>
+        <field name="arch" type="xml">
+            <list decoration-success="state == 'done'"
+                  decoration-info="state == 'draft'"
+                  decoration-warning="state == 'processing'"
+                  decoration-danger="state == 'error'">
+                <field name="name"/>
+                <field name="sync_type"/>
+                <field name="tiendanube_id"/>
+                <field name="webhook_event"/>
+                <field name="priority"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'done'"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'processing'"
+                       decoration-danger="state == 'error'"/>
+                <field name="retry_count"/>
+                <field name="processing_time" widget="float_time"/>
+                <field name="created_at"/>
+                <field name="processed_at"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_tiendanube_sync_queue_form" model="ir.ui.view">
+        <field name="name">tiendanube.sync.queue.form</field>
+        <field name="model">tiendanube.sync.queue</field>
+        <field name="arch" type="xml">
+            <form string="Cola de Sincronización">
+                <header>
+                    <button name="action_reprocess"
+                            string="Reprocesar"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="state != 'error'"/>
+                    <button name="action_mark_done"
+                            string="Marcar como Completado"
+                            type="object"
+                            invisible="state in ('done', 'processing')"/>
+                    <button name="action_view_odoo_record"
+                            string="Ver Registro"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="not odoo_id"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,processing,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Información General">
+                            <field name="sync_type" readonly="1"/>
+                            <field name="direction" readonly="1"/>
+                            <field name="tiendanube_id" readonly="1"/>
+                            <field name="webhook_event" readonly="1"/>
+                            <field name="priority"/>
+                            <field name="company_id" readonly="1" groups="base.group_multi_company"/>
+                        </group>
+                        <group string="Estado de Procesamiento">
+                            <field name="retry_count" readonly="1"/>
+                            <field name="max_retries" readonly="1"/>
+                            <field name="created_at" readonly="1"/>
+                            <field name="processed_at" readonly="1"/>
+                            <field name="processing_time" readonly="1" widget="float_time"/>
+                        </group>
+                    </group>
+                    <group string="Registro Odoo" invisible="not odoo_model">
+                        <group>
+                            <field name="odoo_model" readonly="1"/>
+                            <field name="odoo_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Mensaje de Error" invisible="not error_message">
+                        <field name="error_message" readonly="1" nolabel="1" colspan="2"/>
+                    </group>
+                    <notebook>
+                        <page string="Datos JSON" name="data_json">
+                            <field name="data_json" readonly="1" widget="ace" options="{'mode': 'json'}"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_tiendanube_sync_queue_search" model="ir.ui.view">
+        <field name="name">tiendanube.sync.queue.search</field>
+        <field name="model">tiendanube.sync.queue</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="tiendanube_id"/>
+                <field name="webhook_event"/>
+                <field name="error_message"/>
+                <separator/>
+                <filter string="Pendientes" name="filter_draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Procesando" name="filter_processing" domain="[('state', '=', 'processing')]"/>
+                <filter string="Completados" name="filter_done" domain="[('state', '=', 'done')]"/>
+                <filter string="Errores" name="filter_error" domain="[('state', '=', 'error')]"/>
+                <separator/>
+                <filter string="Productos" name="filter_product" domain="[('sync_type', '=', 'product')]"/>
+                <filter string="Categorías" name="filter_category" domain="[('sync_type', '=', 'category')]"/>
+                <filter string="Órdenes" name="filter_order" domain="[('sync_type', '=', 'order')]"/>
+                <filter string="Cupones" name="filter_coupon" domain="[('sync_type', '=', 'coupon')]"/>
+                <separator/>
+                <filter string="Alta Prioridad" name="filter_high_priority" domain="[('priority', '=', '1')]"/>
+                <filter string="Prioridad Normal" name="filter_normal_priority" domain="[('priority', '=', '2')]"/>
+                <filter string="Baja Prioridad" name="filter_low_priority" domain="[('priority', '=', '3')]"/>
+                <separator/>
+                <filter string="Hoy" name="filter_today"
+                        domain="[('created_at', '>=', (context_today()).strftime('%Y-%m-%d')),
+                                 ('created_at', '&lt;', (context_today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+                <group expand="1" string="Agrupar por">
+                    <filter string="Estado" name="group_state" context="{'group_by': 'state'}"/>
+                    <filter string="Tipo" name="group_sync_type" context="{'group_by': 'sync_type'}"/>
+                    <filter string="Prioridad" name="group_priority" context="{'group_by': 'priority'}"/>
+                    <filter string="Evento" name="group_event" context="{'group_by': 'webhook_event'}"/>
+                    <filter string="Empresa" name="group_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                    <filter string="Fecha Creación" name="group_created" context="{'group_by': 'created_at:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_tiendanube_sync_queue" model="ir.actions.act_window">
+        <field name="name">Cola de Sincronización</field>
+        <field name="res_model">tiendanube.sync.queue</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_filter_draft': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No hay registros en la cola de sincronización
+            </p>
+            <p>
+                Los registros aparecerán aquí cuando se ejecuten los asistentes de
+                sincronización con la cola habilitada.
+            </p>
+        </field>
+    </record>
+
+    <!-- Server Action: Process Queue Now -->
+    <record id="action_server_process_queue_now" model="ir.actions.server">
+        <field name="name">Procesar Cola Ahora</field>
+        <field name="model_id" ref="model_tiendanube_sync_queue"/>
+        <field name="binding_model_id" ref="model_tiendanube_sync_queue"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+action = model.action_process_queue_now()
+        </field>
+    </record>
+
+    <!-- Server Action: Reprocess Selected -->
+    <record id="action_server_reprocess_selected" model="ir.actions.server">
+        <field name="name">Reprocesar Seleccionados</field>
+        <field name="model_id" ref="model_tiendanube_sync_queue"/>
+        <field name="binding_model_id" ref="model_tiendanube_sync_queue"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+records.filtered(lambda r: r.state == 'error').action_reprocess()
+        </field>
+    </record>
+
+</odoo>

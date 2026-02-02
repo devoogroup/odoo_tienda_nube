@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Menu item under Tienda Nube > Configuracion -->
+    <menuitem id="menu_sync_queue_tn"
+              name="Cola de Sincronización"
+              parent="odoo_tienda_nube.menu_settings_tn"
+              action="action_tiendanube_sync_queue"
+              sequence="0"/>
+
+</odoo>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!--
+            Fetcher Cron: Obtiene cambios incrementales de TN usando updated_at_min.
+            DESACTIVADO por defecto - Activar solo si necesita sincronización automática.
+            Los wizards encolan datos sin necesidad de este cron.
+        -->
+        <record id="ir_cron_tn_queue_fetcher" model="ir.cron">
+            <field name="name">TN Queue: Fetcher - Obtener datos de Tienda Nube</field>
+            <field name="model_id" ref="model_tiendanube_sync_queue"/>
+            <field name="interval_number">5</field>
+            <field name="interval_type">minutes</field>
+            <field name="state">code</field>
+            <field name="active" eval="False"/>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="code">model._cron_fetch_from_tn()</field>
+        </record>
+
+    </data>
+</odoo>
