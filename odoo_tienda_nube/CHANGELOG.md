@@ -1,6 +1,6 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
-## [18.0.7.0.0] - 2026-02-01
+## [18.0.7.0.1] - 2026-02-01
 
 ### Fixed
 
