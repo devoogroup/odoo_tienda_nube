@@ -1,5 +1,11 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [18.0.7.0.2] - 2026-02-02
+
+### Fixed
+
+- Se modifica el proceso de creación masiva de productos para que busque el producto incluso si esta archivado
+
 ## [18.0.7.0.1] - 2026-02-01
 
 ### Fixed

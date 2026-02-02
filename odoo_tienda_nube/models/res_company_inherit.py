@@ -124,7 +124,7 @@ class TiendaNubeResCompanyInherit(models.Model):
         products = self.get_all_products_tn()
         for product in products:
             #Verificamos si existe el product_template
-            product_template_odoo = self.env['product.template'].search([('id_tn', '=', product['id'])])
+            product_template_odoo = self.env['product.template'].sudo().search([('id_tn', '=', product['id'])])
 
             categoria_tn_ids = []
             for category in product['categories']:
