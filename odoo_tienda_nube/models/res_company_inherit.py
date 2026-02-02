@@ -129,7 +129,8 @@ class TiendaNubeResCompanyInherit(models.Model):
             categoria_tn_ids = []
             for category in product['categories']:
                 category_odoo = self.env['category.tn'].search([('tn_id', '=', category['id'])])
-                categoria_tn_ids.append(category_odoo.id)
+                if category_odoo:
+                    categoria_tn_ids.append(category_odoo.id)
 
             if not product_template_odoo:
 
@@ -146,17 +147,21 @@ class TiendaNubeResCompanyInherit(models.Model):
                         image_template_base64 = base64.b64encode(response.content)
 
                 #Creamos product_template
-                product_template_odoo = self.env['product.template'].create({
-                    'id_tn': product['id'],
-                    'name': product['name']['es'],
-                    'type': 'consu' if product['requires_shipping'] else 'service',
-                    'is_storable': True if product['requires_shipping'] else False,
-                    'envio_gratis_tn': product['free_shipping'],
-                    'mostrar_en_tienda_tn': product['published'],
-                    'image_1920': image_template_base64,
-                    'categoria_tn_ids': [(6, 0, categoria_tn_ids)],
-                    'description_sale': product['description']['es'],
-                })
+                try:
+                    product_template_odoo = self.env['product.template'].create({
+                        'id_tn': product['id'],
+                        'name': product['name']['es'],
+                        'type': 'consu' if product['requires_shipping'] else 'service',
+                        'is_storable': True if product['requires_shipping'] else False,
+                        'envio_gratis_tn': product['free_shipping'],
+                        'mostrar_en_tienda_tn': product['published'],
+                        'image_1920': image_template_base64,
+                        'categoria_tn_ids': [(6, 0, categoria_tn_ids)],
+                        'description_sale': product['description']['es'],
+                    })
+                except Exception as e:
+                    _logger.error('Error al crear product.template de Tienda Nube ID %s: %s', product['id'], str(e))
+                    continue
 
             #Verificamos si tiene atributos y de ser asi creamos los faltantes, asi como cada una de las variables de esos atributos
             if product['attributes']:
