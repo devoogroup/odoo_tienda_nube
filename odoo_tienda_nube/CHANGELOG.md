@@ -1,12 +1,18 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [18.0.7.0.0] - 2026-02-01
+
+### Fixed
+
+- Se modifica el wizard de Creación masiva de productos para evitar que si una categoria no esta en odoo, no envia a la
+  lista de productos, una categoria en false, y control de error para que no falle el proceso.
+
+
 ## [18.0.7.0.0] - 2026-01-22
 
 ### Added
 
 - Asociación de compañía en categorías y cupones.Reglas específicas para el manejo multicompañía en ambos casos.
-- Se modifica el wizard de Creación masiva de productos para evitar que si una categoria no esta en odoo, no envia a la
-  lista de productos, una categoria en false, y control de error para que no falle el proceso.
 
 ## [18.0.6.0.0] - 2025-12-31
 
