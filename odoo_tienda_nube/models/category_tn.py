@@ -10,7 +10,7 @@ class CategoryTn(models.Model):
     _description = 'Categoria Tienda Nube'
 
     name = fields.Char(string='Nombre', required=True)
-    tn_id = fields.Integer(string='Tienda Nube ID')
+    tn_id = fields.Integer(string='Tienda Nube ID', copy=False, index=True)
     parent_id = fields.Many2one('category.tn', string='Categoria Padre')
     company_id = fields.Many2one('res.company', string='Compañía', default=lambda self: self.env.company, required=True, index=True)
 
