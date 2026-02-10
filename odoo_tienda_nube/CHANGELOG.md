@@ -1,5 +1,9 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [19.0.0.0.2] - 2026-02-10
+### Changed
+- Ajustes menores en documentación y limpieza de código previo a la migración a Odoo 19.
+
 ## [19.0.1.0.0] - 2026-01-21
 ### Changed
 - Migración del módulo a Odoo 19.0 siguiendo las guías de OCA.
