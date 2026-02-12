@@ -1,5 +1,10 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [19.0.0.0.3] - 2026-02-11
+### Changed
+- Cambio en el name del page TN en sale.order
+
+
 ## [19.0.0.0.2] - 2026-02-10
 ### Changed
 - Ajustes menores en documentación y limpieza de código previo a la migración a Odoo 19.
