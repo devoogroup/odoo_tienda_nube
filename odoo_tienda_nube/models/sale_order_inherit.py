@@ -55,6 +55,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
 
     coupon_tn_ids = fields.Many2many('coupon.tn', string='Cupones Tienda Nube', help="Cupones de Tienda Nube", readonly=True)
     promotions_applied_tn = fields.Text('Promociones aplicadas', help="Promociones aplicadas de Tienda Nube", copy=False)
+    discount_gateway_tn = fields.Char('Descuento por medio de pago', help="Descuento por medio de pago de Tienda Nube", copy=False, readonly=True)
 
     json_tn = fields.Text('JSON Tienda Nube', help="JSON de Tienda Nube", copy=False)
 
@@ -168,7 +169,11 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     })
 
                 # DESCUENTOS
-                if len(order['coupon']) or len(order['promotional_discount']['promotions_applied']):
+                has_coupon = len(order['coupon']) > 0
+                has_promotions = len(order['promotional_discount']['promotions_applied']) > 0
+                has_gateway_discount = order.get('discount_gateway') and float(order['discount_gateway']) > 0
+
+                if has_coupon or has_promotions or has_gateway_discount:
                     product_discount_tn = self.env.ref('odoo_tienda_nube.product_discount_tn')
                     if not product_discount_tn:
                         raise ValidationError(_("Producto de descuento no encontrado en Odoo"))
@@ -205,6 +210,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                             'product_uom_qty': -1,
                             'price_unit': order['discount_coupon'],
                         }).write({'tax_id': False})
+
                     # Verificamos por promociones aplicadas
                     if 'promotions_applied' in order['promotional_discount']:
                         for promotions_applied in order['promotional_discount']['promotions_applied']:
@@ -219,6 +225,23 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 'product_uom_qty': -1,
                                 'price_unit': promotions_applied['total_discount_amount'],
                             }).write({'tax_id': False})
+
+                    # Verificamos por descuento de medio de pago (gateway)
+                    if has_gateway_discount:
+                        gateway_name = order.get('gateway_name') or order.get('gateway') or 'Medio de pago'
+                        self.discount_gateway_tn = gateway_name + ': $' + order['discount_gateway']
+                        discount_gateway_amount = float(order['discount_gateway'])
+                        if self.company_id.tn_type_tax == 'not_included':
+                            value_tax = (((product_discount_tn.taxes_id.compute_all(discount_gateway_amount)['total_included']) * 100) / (product_discount_tn.taxes_id.compute_all(discount_gateway_amount)['total_excluded'])) / 100
+                            if value_tax:
+                                discount_gateway_amount = discount_gateway_amount / value_tax
+                        self.env['sale.order.line'].create({
+                            'name': 'Descuento por medio de pago (' + gateway_name + ')',
+                            'order_id': self.id,
+                            'product_id': product_discount_tn.id,
+                            'product_uom_qty': -1,
+                            'price_unit': discount_gateway_amount,
+                        }).write({'tax_id': False})
                             
                 # ENVIO
                 product_shipping_tn = self.env.ref('odoo_tienda_nube.product_shipping_tn')

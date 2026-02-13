@@ -1,5 +1,10 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [18.0.7.0.2] - 2026-02-12
+### Fixed
+
+- Se modifica para que tome los descuento de medio de pago que viene de TN
+
 ## [18.0.7.0.1] - 2026-02-01
 
 ### Fixed
