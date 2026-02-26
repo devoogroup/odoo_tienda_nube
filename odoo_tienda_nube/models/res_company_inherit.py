@@ -563,7 +563,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                 variant.barcode = str(temp_barcode)
             values = []
             for value in variant.product_template_attribute_value_ids:
-                values.append(value.name)
+                values.append({"es": value.name})
             price_tn = self.tn_pricelist_id._get_product_price(variant.product_tmpl_id, quantity=1)
             if price_tn is None:
                 price_tn = variant.list_price
