@@ -178,6 +178,25 @@ class TiendaNubeWebHook(http.Controller):
                             order.sudo().with_company(company_id).create_order_from_tn()
                         exitoso = True
 
+                    #order/cancelled
+                    elif webhook.event == 'order/cancelled':
+                        order = request.env['sale.order'].sudo().search([
+                            ('id_tn','=',data['id'])
+                            ],limit=1)
+                        if order:
+                            if order.state == 'draft':
+                                order.sudo().action_cancel()
+                            elif order.state == 'sale':
+                                order.sudo().action_cancel()
+                            request.env['tn.log'].sudo().create_log(
+                                'Orden %s cancelada desde Tienda Nube' % order.name,
+                                'Orden cancelada por webhook order/cancelled',
+                                'sale.order',
+                                order.id,
+                                'info',
+                            )
+                        exitoso = True
+
                 if exitoso:
                     return request.make_response(
                         json.dumps({"mensaje": "Operación exitosa"}),
