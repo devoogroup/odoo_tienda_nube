@@ -139,13 +139,54 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 elif order['contact_email'] != None:
                     partner = self.env['res.partner'].search([('email', '=', order['contact_email'])], limit=1)
                 if not partner:
-                    partner = self.env['res.partner'].create({
+                    # Dirección
+                    street_parts = [order.get('billing_address') or '']
+                    if order.get('billing_number'):
+                        street_parts.append(order['billing_number'])
+                    street = ' '.join(filter(None, street_parts)) or False
+                    country = self.env['res.country'].search([('code', '=', order.get('billing_country'))], limit=1)
+                    state = False
+                    if order.get('billing_province') and country:
+                        state = self.env['res.country.state'].search([
+                            ('name', 'ilike', order['billing_province']),
+                            ('country_id', '=', country.id),
+                        ], limit=1)
+                    # Tipo de documento
+                    billing_document_type = order.get('billing_document_type') or (order.get('customer') or {}).get('document_type')
+                    l10n_latam_id = False
+                    if billing_document_type:
+                        id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', billing_document_type)], limit=1)
+                        if id_type:
+                            l10n_latam_id = id_type.id
+                    elif order.get('billing_country') == 'AR':
+                        identification = order.get('contact_identification') or (order.get('customer') or {}).get('identification') or ''
+                        digits = ''.join(filter(str.isdigit, str(identification)))
+                        if len(digits) in (7, 8):
+                            doc_name = 'DNI'
+                        elif len(digits) in (10, 11):
+                            doc_name = 'CUIT'
+                        else:
+                            doc_name = None
+                        if doc_name:
+                            id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', doc_name)], limit=1)
+                            if id_type:
+                                l10n_latam_id = id_type.id
+                    partner_vals = {
                         'name': order['customer']['name'] if 'customer' in order else order['contact_name'],
                         'email': order['customer']['email'] if 'customer' in order else order['contact_email'],
                         'phone': order['customer']['phone'] if 'customer' in order else order['contact_phone'],
                         'vat': order['customer']['identification'] if 'customer' in order else order['contact_identification'],
                         'company_type': 'person',
-                    })
+                        'street': street,
+                        'street2': order.get('billing_floor') or False,
+                        'zip': order.get('billing_zipcode') or False,
+                        'city': order.get('billing_city') or False,
+                        'state_id': state.id if state else False,
+                        'country_id': country.id if country else False,
+                    }
+                    if l10n_latam_id:
+                        partner_vals['l10n_latam_identification_type_id'] = l10n_latam_id
+                    partner = self.env['res.partner'].create(partner_vals)
                 self.partner_id = partner.id
                 
                 # Completamos lineas de la orden
