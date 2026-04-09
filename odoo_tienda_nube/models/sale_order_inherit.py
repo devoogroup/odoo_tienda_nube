@@ -138,13 +138,54 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 elif order['contact_email'] != None:
                     partner = self.env['res.partner'].search([('email', '=', order['contact_email'])], limit=1)
                 if not partner:
-                    partner = self.env['res.partner'].create({
+                    # Dirección
+                    street_parts = [order.get('billing_address') or '']
+                    if order.get('billing_number'):
+                        street_parts.append(order['billing_number'])
+                    street = ' '.join(filter(None, street_parts)) or False
+                    country = self.env['res.country'].search([('code', '=', order.get('billing_country'))], limit=1)
+                    state = False
+                    if order.get('billing_province') and country:
+                        state = self.env['res.country.state'].search([
+                            ('name', 'ilike', order['billing_province']),
+                            ('country_id', '=', country.id),
+                        ], limit=1)
+                    # Tipo de documento
+                    billing_document_type = order.get('billing_document_type') or (order.get('customer') or {}).get('document_type')
+                    l10n_latam_id = False
+                    if billing_document_type:
+                        id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', billing_document_type)], limit=1)
+                        if id_type:
+                            l10n_latam_id = id_type.id
+                    elif order.get('billing_country') == 'AR':
+                        identification = order.get('contact_identification') or (order.get('customer') or {}).get('identification') or ''
+                        digits = ''.join(filter(str.isdigit, str(identification)))
+                        if len(digits) in (7, 8):
+                            doc_name = 'DNI'
+                        elif len(digits) in (10, 11):
+                            doc_name = 'CUIT'
+                        else:
+                            doc_name = None
+                        if doc_name:
+                            id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', doc_name)], limit=1)
+                            if id_type:
+                                l10n_latam_id = id_type.id
+                    partner_vals = {
                         'name': order['customer']['name'] if 'customer' in order else order['contact_name'],
                         'email': order['customer']['email'] if 'customer' in order else order['contact_email'],
                         'phone': order['customer']['phone'] if 'customer' in order else order['contact_phone'],
                         'vat': order['customer']['identification'] if 'customer' in order else order['contact_identification'],
                         'company_type': 'person',
-                    })
+                        'street': street,
+                        'street2': order.get('billing_floor') or False,
+                        'zip': order.get('billing_zipcode') or False,
+                        'city': order.get('billing_city') or False,
+                        'state_id': state.id if state else False,
+                        'country_id': country.id if country else False,
+                    }
+                    if l10n_latam_id:
+                        partner_vals['l10n_latam_identification_type_id'] = l10n_latam_id
+                    partner = self.env['res.partner'].create(partner_vals)
                 self.partner_id = partner.id
                 
                 # Completamos lineas de la orden
@@ -198,13 +239,18 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 'end_date': coupon['end_date'],
                             })
                         self.coupon_tn_ids = [(4, coupon_tn.id)]
+                        discount_coupon_amount = float(order['discount_coupon'])
+                        if self.company_id.tn_type_tax == 'not_included':
+                            value_tax = (((product_discount_tn.taxes_id.compute_all(discount_coupon_amount)['total_included']) * 100) / (product_discount_tn.taxes_id.compute_all(discount_coupon_amount)['total_excluded'])) / 100
+                            if value_tax:
+                                discount_coupon_amount = discount_coupon_amount / value_tax
                         self.env['sale.order.line'].create({
                             'name': 'Descuento por cupón (' + coupon['code'] + ')',
                             'order_id': self.id,
                             'product_id': product_discount_tn.id,
                             'product_uom_qty': -1,
-                            'price_unit': order['discount_coupon'],
-                        }).write({'tax_id': False})
+                            'price_unit': discount_coupon_amount,
+                        })
                     # Verificamos por promociones aplicadas
                     if 'promotions_applied' in order['promotional_discount']:
                         for promotions_applied in order['promotional_discount']['promotions_applied']:
@@ -212,13 +258,18 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 self.promotions_applied_tn += "Tipo: " + promotions_applied['discount_script_type'] + " - Descuento: " + promotions_applied['total_discount_amount_short'] + "\n"
                             else:
                                 self.promotions_applied_tn = "Tipo: " + promotions_applied['discount_script_type'] + " - Descuento: " + promotions_applied['total_discount_amount_short'] + "\n"
+                            discount_promo_amount = float(promotions_applied['total_discount_amount'])
+                            if self.company_id.tn_type_tax == 'not_included':
+                                value_tax = (((product_discount_tn.taxes_id.compute_all(discount_promo_amount)['total_included']) * 100) / (product_discount_tn.taxes_id.compute_all(discount_promo_amount)['total_excluded'])) / 100
+                                if value_tax:
+                                    discount_promo_amount = discount_promo_amount / value_tax
                             self.env['sale.order.line'].create({
                                 'name': 'Promoción ' + promotions_applied['discount_script_type'],
                                 'order_id': self.id,
                                 'product_id': product_discount_tn.id,
                                 'product_uom_qty': -1,
-                                'price_unit': promotions_applied['total_discount_amount'],
-                            }).write({'tax_id': False})
+                                'price_unit': discount_promo_amount,
+                            })
                             
                 # ENVIO
                 product_shipping_tn = self.env.ref('odoo_tienda_nube.product_shipping_tn')
@@ -227,9 +278,10 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 
                 #Verificamos si tenemos que quitar impuestos
                 price_shipping = float(order['shipping_cost_customer'])
-                if self.company_id.tn_type_tax == 'not_included':
+                if self.company_id.tn_type_tax == 'not_included' and price_shipping > 0:
                     value_tax = (((product_shipping_tn.taxes_id.compute_all(price_shipping)['total_included']) * 100) / (product_shipping_tn.taxes_id.compute_all(price_shipping)['total_excluded'])) / 100
-                    price_shipping = price_shipping / value_tax
+                    if value_tax:
+                        price_shipping = price_shipping / value_tax
 
                 self.env['sale.order.line'].create({
                     'name': 'Costo de Envío (' + order['shipping_option'] + ')',
