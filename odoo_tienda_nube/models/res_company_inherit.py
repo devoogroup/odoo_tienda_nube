@@ -164,7 +164,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                 index = 0 # Flag para recorrer los valores de las variantes ya que vinen ordenados segun el orden de los atributos
                 for attribute in product['attributes']:
                     #Buscamos si existe el atributo
-                    attribute_odoo = self.env['product.attribute'].search([('name', '=', attribute['es'])])
+                    attribute_odoo = self.env['product.attribute'].search([('name', '=', attribute['es'])], limit=1)
                     if not attribute_odoo:
                         #Creamos atributo
                         attribute_odoo = self.env['product.attribute'].create({
@@ -174,7 +174,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                     ids_vales = []
                     for variant in product['variants']:
 
-                        value_attribute_odoo = self.env['product.attribute.value'].search([('name', '=', variant['values'][index]['es']),('attribute_id', '=', attribute_odoo.id)])
+                        value_attribute_odoo = self.env['product.attribute.value'].search([('name', '=', variant['values'][index]['es']),('attribute_id', '=', attribute_odoo.id)], limit=1)
                         if not value_attribute_odoo:
                             #Creamos valor
                             value_attribute_odoo = self.env['product.attribute.value'].create({
@@ -733,6 +733,51 @@ class TiendaNubeResCompanyInherit(models.Model):
                 error_tn=response.text,
             )
             raise ValidationError('Error al obtener ordenes de Tienda Nube: %s' % response.text)
+
+    # Metodo para traer ordenes de Tienda Nube a Odoo filtradas por rango de fechas
+    def get_orders_by_date_tn(self, date_from, date_to):
+        headers = self.get_headers_tn()
+        date_from_str = str(date_from) + 'T00:00:00'
+        date_to_str = str(date_to) + 'T23:59:59'
+        page = 1
+        while True:
+            url = (
+                "https://api.tiendanube.com/v1/%s/orders?fields=id"
+                "&created_at_min=%s&created_at_max=%s&page=%s&per_page=200"
+            ) % (self.tiendanube_id, date_from_str, date_to_str, page)
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                if not data:
+                    break
+                for order in data:
+                    order_odoo = self.env['sale.order'].search([('id_tn', '=', order['id'])], limit=1)
+                    if not order_odoo:
+                        self.env['sale.order'].create({
+                            'id_tn': order['id'],
+                            'partner_id': self.env.ref('base.public_partner').id,
+                        }).create_order_from_tn()
+                if len(data) < 200:
+                    break
+                page += 1
+            elif response.status_code == 404:
+                break
+            else:
+                self.env['tn.log'].create_log(
+                    name='Error al obtener órdenes por fecha de Tienda Nube',
+                    message='Rango: %s - %s' % (date_from_str, date_to_str),
+                    model='res.company',
+                    model_id=self.id,
+                    level='error',
+                    error_tn=response.text,
+                )
+                raise ValidationError('Error al obtener órdenes de Tienda Nube: %s' % response.text)
+
+    # Metodo para el CRON: trae las ordenes del dia actual para todas las companias configuradas
+    def cron_sync_orders_today_tn(self):
+        from datetime import date
+        today = date.today()
+        self.get_orders_by_date_tn(today, today)
 
     # Metodo para traer Almacenes y Ubicaciones de Tienda Nube a Odoo
     def get_location_tn(self):
