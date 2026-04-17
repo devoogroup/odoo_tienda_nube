@@ -111,10 +111,17 @@ class TiendaNubeResCompanyInherit(models.Model):
         return products
 
     def get_headers_tn(self):
+        self.ensure_one()
+
+        if not self.tiendanube_access_token:
+            raise ValidationError('Falta configurar el Access Token de Tienda Nube en la compañía.')
+        if not self.tiendanube_id:
+            raise ValidationError('Falta configurar el ID de Tienda Nube en la compañía.')
+
         return {
-            "Authentication": "bearer " + self.tiendanube_access_token,
+            "Authentication": "bearer %s" % self.tiendanube_access_token,
             "Content-Type": "application/json",
-            "User-Agent": "Odoo by Devoo"
+            "User-Agent": "Odoo by Devoo",
         }
 
     #Creamos productos de TN en Odoo
