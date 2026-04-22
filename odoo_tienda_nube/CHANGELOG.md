@@ -1,5 +1,11 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [18.0.7.0.5] - 2026-04-22
+
+### Added
+
+- Al crear un nuevo contacto desde la sincronización de órdenes de Tienda Nube, se asigna automáticamente el tipo de responsabilidad AFIP (`l10n_ar_afip_responsibility_type_id`) en base al campo `billing_customer_type` recibido en la orden. Solo aplica cuando la compañía es argentina y el módulo de localización argentina (`l10n_ar`) está instalado. Si el campo no viene informado, se asigna **Consumidor Final** por defecto. Los contactos ya existentes en Odoo no son modificados.
+
 ## [18.0.7.0.2] - 2026-02-12
 ### Fixed
 

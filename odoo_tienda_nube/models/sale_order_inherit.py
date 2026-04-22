@@ -187,6 +187,15 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     if l10n_latam_id:
                         partner_vals['l10n_latam_identification_type_id'] = l10n_latam_id
                     partner = self.env['res.partner'].create(partner_vals)
+                    if (
+                        company.country_id.code == 'AR'
+                        and 'l10n_ar_afip_responsibility_type_id' in self.env['res.partner']._fields
+                    ):
+                        afip_type = self._get_afip_responsibility_from_tn(
+                            order.get('billing_customer_type')
+                        )
+                        if afip_type:
+                            partner.l10n_ar_afip_responsibility_type_id = afip_type
                 self.partner_id = partner.id
                 
                 # Completamos lineas de la orden
@@ -333,3 +342,21 @@ class SaleOrderTiendaNubeInherit(models.Model):
         except Exception as e:
             # Creamos un log
             self.env['tn.log'].create_log('No se pudo crear Orden de Venta', str(e), 'sale.order', self.id, 'error')
+
+    _TN_BILLING_TYPE_TO_AFIP_CODE = {
+        'Consumidor Final': '5',
+        'Responsable Inscripto': '1',
+        'IVA Responsable Inscripto': '1',
+        'Monotributo': '6',
+        'Responsable Monotributo': '6',
+        'IVA Exento': '4',
+        'IVA Sujeto Exento': '4',
+        'Exento': '4',
+    }
+
+    def _get_afip_responsibility_from_tn(self, billing_customer_type):
+        code = self._TN_BILLING_TYPE_TO_AFIP_CODE.get(billing_customer_type, '5')
+        result = self.env['l10n_ar.afip.responsibility.type'].search(
+            [('code', '=', code)], limit=1
+        )
+        return result if result else False
