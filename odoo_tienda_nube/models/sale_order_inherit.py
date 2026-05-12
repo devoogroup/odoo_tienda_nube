@@ -189,12 +189,13 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 self.partner_id = partner.id
                 
                 # Completamos lineas de la orden
+                missing_lines = []
                 for line in order['products']:
                     product = self.env['product.product'].search([('product_id_tn', '=', line['variant_id'])], limit=1)
-                    
+
                     if not product:
-                        self.env.cr.rollback()
-                        raise ValidationError(_("Producto '{0}' con codigo '{1}' en Tienda Nuve no encontrado en Odoo".format(line['name'], line['variant_id'])))
+                        missing_lines.append("'%s' (TN id: %s)" % (line['name'], line['variant_id']))
+                        continue
                     #Verificamos si tenemos que quitar impuestos
                     price_unit = float(line['price'])
                     if self.company_id.tn_type_tax == 'not_included':
@@ -207,6 +208,18 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         'product_uom_qty': float(line['quantity']),
                         'price_unit': price_unit,
                     })
+                if missing_lines:
+                    _logger.warning(
+                        '[TN] Orden %s: productos no encontrados en Odoo: %s',
+                        self.id_tn, ', '.join(missing_lines),
+                    )
+                    self.env['tn.log'].create_log(
+                        'Productos no encontrados — %s' % self.name,
+                        'Líneas omitidas por no estar sincronizadas con Odoo: %s' % ', '.join(missing_lines),
+                        'sale.order',
+                        self.id,
+                        'error',
+                    )
 
                 # DESCUENTOS
                 if len(order['coupon']) or len(order['promotional_discount']['promotions_applied']):
