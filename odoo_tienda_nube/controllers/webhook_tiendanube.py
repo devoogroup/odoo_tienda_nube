@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import logging
+import requests
 
 import odoo
 import json
-from odoo import http
+from odoo import _, http
 from odoo.http import request
 
 _logger = logging.getLogger(__name__)
@@ -21,11 +22,20 @@ class TiendaNubeWebHook(http.Controller):
             return True
         return False
 
-    #Controller para descargar adjuntos
+    def _fetch_order_json_tn(self, company, order_id):
+        """Pre-carga el JSON completo de una orden desde la API de TN."""
+        try:
+            url = "https://api.tiendanube.com/v1/%s/orders/%s" % (company.tiendanube_id, order_id)
+            response = requests.get(url, headers=company.get_headers_tn())
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            _logger.warning('[Webhook TN] Error pre-cargando JSON orden %s: %s', order_id, e)
+        return None
+
     @http.route('/webhook_tn/<string:code_event>', auth='public', cors=CORS, csrf=False)
     def TiendaNubeWebHook(self, **kw):
 
-        
         # Verificación de locking
         lock_name = 'webhook_processing'
         if request.env['ir.config_parameter'].sudo().get_param(lock_name) == 'En uso':
@@ -34,14 +44,13 @@ class TiendaNubeWebHook(http.Controller):
                 headers={'Content-Type': 'application/json'},
                 status=429
             )
-        
-        request.env['ir.config_parameter'].sudo().set_param(lock_name, 'En uso')
-        # Como puede darse la posibilidad de que entren mas rapido webhook duplicados que la velocidad de creacion de un webhook.tn.received
-        # creamos este parametro de sistema para controlar si se esta usando el endpoint webhook_tn, de estar en uso rebotamos cualquier solicitud
-        # hasta que se resuelva la que esta en proceso
-        request.env.cr.commit()
-        try:
 
+        request.env['ir.config_parameter'].sudo().set_param(lock_name, 'En uso')
+        request.env.cr.commit()
+
+        webhook_received_id = None
+
+        try:
             data = json.loads(request.httprequest.get_data())
 
             # Verificacion de duplicidad
@@ -52,13 +61,13 @@ class TiendaNubeWebHook(http.Controller):
                     status=200
                 )
             else:
-                # Creamos el registro webhook.tn.received
-                request.env['webhook.tn.received'].sudo().create({
+                webhook_received = request.env['webhook.tn.received'].sudo().create({
                     'name': 'Evento: ' + data['event'] + ' - ID: ' + str(data['id']) + ' - Store ID:' + str(data['store_id']),
                     'id_event_tn': data['id'],
                     'event': data['event'],
                     'store_id': data['store_id'],
                 })
+                webhook_received_id = webhook_received.id
                 request.env.cr.commit()
 
             if 'code_event' in kw:
@@ -68,11 +77,9 @@ class TiendaNubeWebHook(http.Controller):
                     ],limit=1)
                 exitoso = False
 
-                # Recordset de empresa para pasar la empresa en el contexto de creaciones
                 company_id = webhook.company_id if webhook.company_id else None
                 if webhook:
-                    #CATEGORIAS
-                    #category/updated
+                    # CATEGORIAS
                     if webhook.event == 'category/updated':
                         category = request.env['category.tn'].sudo().search([
                             ('tn_id','=',data['id'])
@@ -80,13 +87,11 @@ class TiendaNubeWebHook(http.Controller):
                         if category:
                             category.sudo().with_company(company_id).update_category_tn_odoo()
                         exitoso = True
-                        
-                    #category/created
+
                     elif webhook.event == 'category/created':
-                        #Creamos la/s categoria/s nueva/s
                         webhook.company_id.sudo().get_all_categories_tn()
                         exitoso = True
-                    #category/deleted
+
                     elif webhook.event == 'category/deleted':
                         category = request.env['category.tn'].sudo().search([
                             ('tn_id','=',data['id'])
@@ -94,8 +99,8 @@ class TiendaNubeWebHook(http.Controller):
                         if category:
                             category.sudo().unlink()
                         exitoso = True
-                    #PRODUCTOS
-                    #product/deleted
+
+                    # PRODUCTOS
                     elif webhook.event == 'product/deleted':
                         product = request.env['product.template'].sudo().search([
                             ('id_tn','=',data['id'])
@@ -108,10 +113,9 @@ class TiendaNubeWebHook(http.Controller):
                                 'default_code': False,
                             })
                         exitoso = True
-                    #product/create
+
                     elif webhook.event == 'product/created':
                         try:
-                            #Buscamos el producto en Odoo y si no existe lo creamos
                             product = request.env['product.template'].sudo().search([
                                 ('id_tn','=',data['id'])
                                 ],limit=1)
@@ -128,13 +132,11 @@ class TiendaNubeWebHook(http.Controller):
                                 headers={'Content-Type': 'application/json'},
                                 status=500
                             )
-                    #product/updated
+
                     elif webhook.event == 'product/updated':
                         product = request.env['product.template'].sudo().search([
                             ('id_tn','=',data['id'])
                             ],limit=1)
-                        # Para evitar un bucle infinito verificamos si el producto fue actualizado desde Odoo hacia tienda nube
-                        # con un tiempo de 2 min suponiendo que mas que esto no demorarian los webhooks
                         if product and (odoo.fields.Datetime.now() - product.write_date).seconds > 120:
                             try:
                                 product.sudo().with_company(company_id).create_update_product_from_tn()
@@ -145,15 +147,20 @@ class TiendaNubeWebHook(http.Controller):
                                     status=500
                                 )
                         exitoso = True
-                    #ORDENES
-                    #order/created
+
+                    # ORDENES
+                    # order/created: siempre crea en borrador, nunca confirma
                     elif webhook.event == 'order/created':
-                        #Buscamos la orden en Odoo y si no existe la creamos
                         order = request.env['sale.order'].sudo().search([
                             ('id_tn','=',data['id'])
                             ],limit=1)
                         if not order:
-                            #Asignamos de forma temporal como cliente a la empresa para poder crear la orden
+                            order_json = self._fetch_order_json_tn(company_id, data['id'])
+                            if order_json and webhook_received_id:
+                                request.env['webhook.tn.received'].sudo().browse(webhook_received_id).write({
+                                    'json_tn': json.dumps(order_json, ensure_ascii=False),
+                                })
+                                request.env.cr.commit()
                             order = request.env['sale.order'].with_company(company_id).sudo().create({
                                 'id_tn': data['id'],
                                 'partner_id': request.env.company.sudo().partner_id.id,
@@ -162,20 +169,28 @@ class TiendaNubeWebHook(http.Controller):
                             order.sudo().with_company(company_id).create_order_from_tn()
                         exitoso = True
 
-                    #order/paid
+                    # order/paid: crea y valida; si existe en borrador, valida
                     elif webhook.event == 'order/paid':
-                        #Buscamos la orden en Odoo y si no existe la creamos
                         order = request.env['sale.order'].sudo().search([
                             ('id_tn','=',data['id'])
                             ],limit=1)
+                        order_json = self._fetch_order_json_tn(company_id, data['id'])
+                        if order_json and webhook_received_id:
+                            request.env['webhook.tn.received'].sudo().browse(webhook_received_id).write({
+                                'json_tn': json.dumps(order_json, ensure_ascii=False),
+                            })
+                            request.env.cr.commit()
                         if not order:
-                            #Asignamos de forma temporal como cliente a la empresa para poder crear la orden
                             order = request.env['sale.order'].with_company(company_id).sudo().create({
                                 'id_tn': data['id'],
                                 'partner_id': request.env.company.sudo().partner_id.id,
                                 'name': 'Orden TN id: ' + str(data['id']),
                             })
                             order.sudo().with_company(company_id).create_order_from_tn()
+                        elif order.state == 'draft':
+                            order.sudo().with_company(company_id)._confirm_from_tn_paid()
+                        else:
+                            order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada — no se realizaron cambios."))
                         exitoso = True
 
                 if exitoso:

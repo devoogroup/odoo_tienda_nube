@@ -116,5 +116,6 @@ class WebhookTNReceived(models.Model):
         ('product/deleted', 'Producto eliminado'),
     ], string='Evento', required=True)
     store_id = fields.Char(string='ID Tienda Nube')
+    json_tn = fields.Text(string='JSON TN', readonly=True, copy=False)
 
         

@@ -313,14 +313,38 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     self.warehouse_id = warehouse_id.id
 
                 # Verificamos si debemos confirmar la orden
-                if self.company_id.tn_config_confirmation_sale:
+                mode = self.company_id.tn_confirmation_mode
+                payment_status = order.get('payment_status')
+                if mode == 'always' or (mode == 'paid' and payment_status == 'paid'):
                     self.action_confirm()
+                    self.message_post(body=_("Orden confirmada automáticamente desde Tienda Nube (payment_status: %s).") % payment_status)
+                else:
+                    self.message_post(body=_("Orden recibida desde Tienda Nube. Estado de pago: %s. Pendiente de confirmación.") % (payment_status or '-'))
 
-                # Creamos un log
                 self.env['tn.log'].create_log('Orden de venta {0} creada'.format(self.name), 'Orden de Venta creada desde Tienda Nube', 'sale.order', self.id, 'success')
             else:
-                # Creamos un log
                 self.env['tn.log'].create_log('No se pudo crear Orden de Venta', 'Error al obtener orden de Tienda Nube', 'sale.order', self.id, 'error', response.text)
         except Exception as e:
             # Creamos un log
             self.env['tn.log'].create_log('No se pudo crear Orden de Venta', str(e), 'sale.order', self.id, 'error')
+
+    def _confirm_from_tn_paid(self):
+        """Procesa order/paid para una orden ya existente en borrador.
+        Solo confirma según el modo configurado, sin re-procesar líneas ni datos."""
+        self.ensure_one()
+        mode = self.company_id.tn_confirmation_mode
+        if mode in ('always', 'paid'):
+            self.action_confirm()
+            self.message_post(body=_("Orden confirmada: pago recibido desde Tienda Nube (webhook order/paid)."))
+            self.env['tn.log'].create_log(
+                'Orden %s confirmada por pago TN' % self.name,
+                'Evento order/paid recibido — confirmación automática.',
+                'sale.order', self.id, 'success',
+            )
+        else:
+            self.message_post(body=_("Pago recibido desde Tienda Nube (webhook order/paid). La orden permanece en borrador según la configuración de confirmación."))
+            self.env['tn.log'].create_log(
+                'Pago TN recibido — orden %s en borrador' % self.name,
+                'Evento order/paid recibido. Modo "Nunca confirmar": la orden no se confirma automáticamente.',
+                'sale.order', self.id, 'success',
+            )

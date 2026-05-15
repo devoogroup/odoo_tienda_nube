@@ -7,38 +7,63 @@
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
                 <page name="TN" string="Tienda Nube">
-                    <group>
+
+                    <separator string="Credenciales" colspan="2"/>
+                    <group name="tn_credentials">
                         <group>
-                            <field name="tiendanube_id" />
-                            <field name="tiendanube_access_token" />
-                            <field name="tn_config_confirmation_sale"/>
-                            <field name="tn_config_stock"/>
-                            <field name="tn_config_stock_realtime"/>
-                            <field name="tn_pricelist_id" options="{'no_create': True, 'no_create_edit': True}"/>
-                            <field name="tn_config_update_product_price_cron"/>
-                            <field name="tn_type_tax"/>
+                            <field name="tiendanube_id"/>
+                            <field name="tiendanube_access_token"/>
                         </group>
-                        <group>
-                        </group>
+                        <group/>
                     </group>
 
-                    <separator string="Configuración específica de sincronización de productos" colspan="2"/>
-                    <group>
+                    <separator string="Configuración de Órdenes" colspan="2"/>
+                    <group name="tn_orders">
                         <group>
-                            <field name="update_product_tn_name" />
-                            <field name="update_product_tn_categories" />
-                            <field name="update_product_tn_promotional_price" />
-                            <field name="update_product_tn_dimensions" />
-                            <field name="update_product_tn_sku" />
-                            <field name="update_product_tn_mpn" />
+                            <field name="tn_confirmation_mode"/>
+                            <!-- tn_sale_team_config inserta tn_team_id / tn_user_id aquí -->
+                        </group>
+                        <group/>
+                    </group>
+
+                    <!-- tn_payment_config inserta sus secciones de pagos/facturas aquí -->
+
+                    <separator string="Precios e Impuestos" colspan="2"/>
+                    <group name="tn_pricing">
+                        <group>
+                            <field name="tn_pricelist_id" options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="tn_type_tax"/>
+                            <field name="tn_config_update_product_price_cron"/>
+                        </group>
+                        <group/>
+                    </group>
+
+                    <separator string="Configuración de Stock" colspan="2"/>
+                    <group name="tn_stock">
+                        <group>
+                            <field name="tn_config_stock"/>
+                            <field name="tn_config_stock_realtime"/>
+                        </group>
+                        <group/>
+                    </group>
+
+                    <separator string="Sincronización de Productos" colspan="2"/>
+                    <group name="tn_product_sync">
+                        <group>
+                            <field name="update_product_tn_name"/>
+                            <field name="update_product_tn_categories"/>
+                            <field name="update_product_tn_promotional_price"/>
+                            <field name="update_product_tn_dimensions"/>
+                            <field name="update_product_tn_sku"/>
+                            <field name="update_product_tn_mpn"/>
                         </group>
                         <group>
-                            <field name="update_product_tn_age_group" />
-                            <field name="update_product_tn_gender" />
-                            <field name="update_product_tn_cost" />
-                            <field name="update_product_tn_description" />
-                            <field name="update_product_tn_published" />
-                            <field name="update_product_tn_free_shipping" />
+                            <field name="update_product_tn_age_group"/>
+                            <field name="update_product_tn_gender"/>
+                            <field name="update_product_tn_cost"/>
+                            <field name="update_product_tn_description"/>
+                            <field name="update_product_tn_published"/>
+                            <field name="update_product_tn_free_shipping"/>
                         </group>
                     </group>
 

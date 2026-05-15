@@ -17,7 +17,12 @@ class TiendaNubeResCompanyInherit(models.Model):
         ('stock', 'Stock en mano'),
         ('stock-price', 'Stock pronosticado'),
     ], string='Configuracion de Stock', default='stock', help="Si es 'Stock en mano' se actualiza el stock en base a la cantidad en mano, si es 'Stock pronosticado' se actualiza el stock en base a la cantidad pronosticada")
-    tn_config_confirmation_sale = fields.Boolean('Confirmar venta', help="Si esta activo se confirma la venta al crear la orden de venta, sino se deja en estado borrador")
+    tn_confirmation_mode = fields.Selection([
+        ('never',  'Nunca confirmar'),
+        ('paid',   'Solo si está pagada'),
+        ('always', 'Confirmar siempre'),
+    ], string='Modo de confirmación de órdenes TN', default='never',
+       help="Determina cuándo se confirma automáticamente una orden importada desde Tienda Nube.")
     tn_config_stock_realtime = fields.Boolean('Stock en tiempo real', help="Si esta activo se actualiza el stock en tiempo real, sino se actualiza cada 30 minutos")
     tn_pricelist_id = fields.Many2one('product.pricelist', string='Lista de Precios Tienda Nube', help="Lista de precios que se usara para los productos de Tienda Nube", required=True)
     tn_config_update_product_price_cron = fields.Boolean('Actualizar precios cada X tiempo', help="Si esta activo se actualizan los precios de los productos en Tienda Nube automaticamente cada dia o segun temporalidad en el cron configurado")
@@ -300,7 +305,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                     price_tn = variant.list_price
                 if self.tn_type_tax == 'not_included':
                     price_tn = variant.taxes_id.compute_all(price_tn)['total_included']
-                stock_variant = variant.qty_available if self.tn_config_stock == 'stock' else variant.virtual_available
+                stock_variant = variant.free_qty if self.tn_config_stock == 'stock' else variant.virtual_available
                 if stock_variant < 0:
                     stock_variant = 0
                 data = {
