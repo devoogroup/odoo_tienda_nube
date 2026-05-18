@@ -313,13 +313,11 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     self.warehouse_id = warehouse_id.id
 
                 # Verificamos si debemos confirmar la orden
-                mode = self.company_id.tn_confirmation_mode
-                payment_status = order.get('payment_status')
-                if mode == 'always' or (mode == 'paid' and payment_status == 'paid'):
+                if self._tn_should_auto_confirm(order):
                     self.action_confirm()
-                    self.message_post(body=_("Orden confirmada automáticamente desde Tienda Nube (payment_status: %s).") % payment_status)
+                    self.message_post(body=self._tn_confirm_message(order))
                 else:
-                    self.message_post(body=_("Orden recibida desde Tienda Nube. Estado de pago: %s. Pendiente de confirmación.") % (payment_status or '-'))
+                    self.message_post(body=self._tn_pending_message(order))
 
                 self.env['tn.log'].create_log('Orden de venta {0} creada'.format(self.name), 'Orden de Venta creada desde Tienda Nube', 'sale.order', self.id, 'success')
             else:
@@ -327,6 +325,21 @@ class SaleOrderTiendaNubeInherit(models.Model):
         except Exception as e:
             # Creamos un log
             self.env['tn.log'].create_log('No se pudo crear Orden de Venta', str(e), 'sale.order', self.id, 'error')
+
+    def _tn_should_auto_confirm(self, order):
+        """Hook: devuelve True si la orden debe confirmarse automáticamente.
+        Sobreescribible por módulos que agreguen nuevos modos de confirmación."""
+        mode = self.company_id.tn_confirmation_mode
+        payment_status = order.get('payment_status')
+        return mode == 'always' or (mode == 'paid' and payment_status == 'paid')
+
+    def _tn_confirm_message(self, order):
+        """Hook: mensaje de chatter cuando la orden se confirma automáticamente."""
+        return _("Orden confirmada automáticamente desde Tienda Nube (payment_status: %s).") % (order.get('payment_status') or '-')
+
+    def _tn_pending_message(self, order):
+        """Hook: mensaje de chatter cuando la orden queda en borrador."""
+        return _("Orden recibida desde Tienda Nube. Estado de pago: %s. Pendiente de confirmación.") % (order.get('payment_status') or '-')
 
     def _confirm_from_tn_paid(self):
         """Procesa order/paid para una orden ya existente en borrador.

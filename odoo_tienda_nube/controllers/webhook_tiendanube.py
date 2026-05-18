@@ -161,12 +161,15 @@ class TiendaNubeWebHook(http.Controller):
                                     'json_tn': json.dumps(order_json, ensure_ascii=False),
                                 })
                                 request.env.cr.commit()
-                            order = request.env['sale.order'].with_company(company_id).sudo().create({
-                                'id_tn': data['id'],
-                                'partner_id': request.env.company.sudo().partner_id.id,
-                                'name': 'Orden TN id: ' + str(data['id']),
-                            })
-                            order.sudo().with_company(company_id).create_order_from_tn()
+                            if not order_json or not order_json.get('number'):
+                                _logger.info('[Webhook TN] order/created id=%s ignorada: número de orden inválido (%s)', data['id'], order_json and order_json.get('number'))
+                            else:
+                                order = request.env['sale.order'].with_company(company_id).sudo().create({
+                                    'id_tn': data['id'],
+                                    'partner_id': request.env.company.sudo().partner_id.id,
+                                    'name': 'Orden TN id: ' + str(data['id']),
+                                })
+                                order.sudo().with_company(company_id).create_order_from_tn()
                         exitoso = True
 
                     # order/paid: crea y valida; si existe en borrador, valida
@@ -181,12 +184,15 @@ class TiendaNubeWebHook(http.Controller):
                             })
                             request.env.cr.commit()
                         if not order:
-                            order = request.env['sale.order'].with_company(company_id).sudo().create({
-                                'id_tn': data['id'],
-                                'partner_id': request.env.company.sudo().partner_id.id,
-                                'name': 'Orden TN id: ' + str(data['id']),
-                            })
-                            order.sudo().with_company(company_id).create_order_from_tn()
+                            if not order_json or not order_json.get('number'):
+                                _logger.info('[Webhook TN] order/paid id=%s ignorada: número de orden inválido (%s)', data['id'], order_json and order_json.get('number'))
+                            else:
+                                order = request.env['sale.order'].with_company(company_id).sudo().create({
+                                    'id_tn': data['id'],
+                                    'partner_id': request.env.company.sudo().partner_id.id,
+                                    'name': 'Orden TN id: ' + str(data['id']),
+                                })
+                                order.sudo().with_company(company_id).create_order_from_tn()
                         elif order.state == 'draft':
                             order.sudo().with_company(company_id)._confirm_from_tn_paid()
                         else:
