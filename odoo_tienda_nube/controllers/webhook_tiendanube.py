@@ -183,6 +183,7 @@ class TiendaNubeWebHook(http.Controller):
                                 'json_tn': json.dumps(order_json, ensure_ascii=False),
                             })
                             request.env.cr.commit()
+                        _TN_TERMINAL_STATUSES = {'paid', 'cancelled', 'voided', 'refunded'}
                         if not order:
                             if not order_json or not order_json.get('number'):
                                 _logger.info('[Webhook TN] order/paid id=%s ignorada: número de orden inválido (%s)', data['id'], order_json and order_json.get('number'))
@@ -193,6 +194,8 @@ class TiendaNubeWebHook(http.Controller):
                                     'name': 'Orden TN id: ' + str(data['id']),
                                 })
                                 order.sudo().with_company(company_id).create_order_from_tn()
+                                if order.state == 'draft' and order_json.get('payment_status') not in _TN_TERMINAL_STATUSES:
+                                    order.sudo()._tn_mark_for_payment_polling(order_json)
                         elif order.state == 'draft':
                             order.sudo().with_company(company_id)._confirm_from_tn_paid()
                         else:
