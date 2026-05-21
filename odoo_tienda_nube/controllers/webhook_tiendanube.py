@@ -254,11 +254,17 @@ class TiendaNubeWebHook(http.Controller):
                 '[Webhook TN] Error no controlado procesando evento=%s id=%s: %s',
                 data.get('event', '?'), data.get('id', '?'), str(e), exc_info=True,
             )
-            request.env['ir.config_parameter'].sudo().set_param(lock_name, 'Disponible')
             return request.make_response(
                 json.dumps({"mensaje": "Error al procesar la solicitud"}),
                 headers={'Content-Type': 'application/json'},
                 status=500
             )
         finally:
-            request.env['ir.config_parameter'].sudo().set_param(lock_name, 'Disponible')
+            try:
+                # rollback limpia el estado de transacción abortada (error de BD) sin deshacer
+                # los commits explícitos ya realizados arriba (webhook_received, json_tn, etc.)
+                request.env.cr.rollback()
+                request.env['ir.config_parameter'].sudo().set_param(lock_name, 'Disponible')
+                request.env.cr.commit()
+            except Exception as release_err:
+                _logger.error('[Webhook TN] No se pudo liberar el lock webhook_processing: %s', release_err)
