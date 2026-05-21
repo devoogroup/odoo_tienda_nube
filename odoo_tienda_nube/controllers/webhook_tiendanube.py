@@ -29,6 +29,7 @@ class TiendaNubeWebHook(http.Controller):
             response = requests.get(url, headers=company.get_headers_tn())
             if response.status_code == 200:
                 return response.json()
+            _logger.warning('[Webhook TN] TN respondió %s al pre-cargar orden id=%s', response.status_code, order_id)
         except Exception as e:
             _logger.warning('[Webhook TN] Error pre-cargando JSON orden %s: %s', order_id, e)
         return None
@@ -49,12 +50,14 @@ class TiendaNubeWebHook(http.Controller):
         request.env.cr.commit()
 
         webhook_received_id = None
+        data = {}
 
         try:
             data = json.loads(request.httprequest.get_data())
 
             # Verificacion de duplicidad
             if self.duplicity_check(data):
+                _logger.info('[Webhook TN] Evento duplicado ignorado: %s id=%s', data.get('event'), data.get('id'))
                 return request.make_response(
                     json.dumps({"mensaje": "Operación duplicada"}),
                     headers={'Content-Type': 'application/json'},
@@ -127,6 +130,7 @@ class TiendaNubeWebHook(http.Controller):
                             product.sudo().with_company(company_id).create_update_product_from_tn()
                             exitoso = True
                         except Exception as e:
+                            _logger.error('[Webhook TN] product/created id=%s: %s', data.get('id'), str(e), exc_info=True)
                             return request.make_response(
                                 json.dumps({"mensaje": "Error al crear el producto"}),
                                 headers={'Content-Type': 'application/json'},
@@ -141,6 +145,7 @@ class TiendaNubeWebHook(http.Controller):
                             try:
                                 product.sudo().with_company(company_id).create_update_product_from_tn()
                             except Exception as e:
+                                _logger.error('[Webhook TN] product/updated id=%s: %s', data.get('id'), str(e), exc_info=True)
                                 return request.make_response(
                                     json.dumps({"mensaje": "Error al actualizar el producto"}),
                                     headers={'Content-Type': 'application/json'},
@@ -151,6 +156,7 @@ class TiendaNubeWebHook(http.Controller):
                     # ORDENES
                     # order/created: siempre crea en borrador, nunca confirma
                     elif webhook.event == 'order/created':
+                        _logger.info('[Webhook TN] order/created id=%s', data['id'])
                         order = request.env['sale.order'].sudo().search([
                             ('id_tn','=',data['id'])
                             ],limit=1)
@@ -164,16 +170,24 @@ class TiendaNubeWebHook(http.Controller):
                             if not order_json or not order_json.get('number'):
                                 _logger.info('[Webhook TN] order/created id=%s ignorada: número de orden inválido (%s)', data['id'], order_json and order_json.get('number'))
                             else:
+                                _logger.info('[Webhook TN] order/created id=%s — creando sale.order', data['id'])
                                 order = request.env['sale.order'].with_company(company_id).sudo().create({
                                     'id_tn': data['id'],
                                     'partner_id': request.env.company.sudo().partner_id.id,
                                     'name': 'Orden TN id: ' + str(data['id']),
                                 })
-                                order.sudo().with_company(company_id).create_order_from_tn()
+                                try:
+                                    order.sudo().with_company(company_id).create_order_from_tn()
+                                    _logger.info('[Webhook TN] order/created id=%s — orden %s procesada (state=%s)', data['id'], order.name, order.state)
+                                except Exception as e:
+                                    _logger.error('[Webhook TN] order/created id=%s — error en create_order_from_tn: %s', data['id'], str(e), exc_info=True)
+                        else:
+                            _logger.info('[Webhook TN] order/created id=%s — orden ya existe (%s), ignorando', data['id'], order.name)
                         exitoso = True
 
                     # order/paid: crea y valida; si existe en borrador, valida
                     elif webhook.event == 'order/paid':
+                        _logger.info('[Webhook TN] order/paid id=%s', data['id'])
                         order = request.env['sale.order'].sudo().search([
                             ('id_tn','=',data['id'])
                             ],limit=1)
@@ -188,24 +202,38 @@ class TiendaNubeWebHook(http.Controller):
                             if not order_json or not order_json.get('number'):
                                 _logger.info('[Webhook TN] order/paid id=%s ignorada: número de orden inválido (%s)', data['id'], order_json and order_json.get('number'))
                             else:
+                                _logger.info('[Webhook TN] order/paid id=%s — orden nueva, creando', data['id'])
                                 order = request.env['sale.order'].with_company(company_id).sudo().create({
                                     'id_tn': data['id'],
                                     'partner_id': request.env.company.sudo().partner_id.id,
                                     'name': 'Orden TN id: ' + str(data['id']),
                                 })
-                                order.sudo().with_company(company_id).create_order_from_tn()
-                                if order.state == 'draft' and not order.tn_has_missing_products and order_json.get('payment_status') not in _TN_TERMINAL_STATUSES:
-                                    order.sudo()._tn_mark_for_payment_polling(order_json)
+                                try:
+                                    order.sudo().with_company(company_id).create_order_from_tn()
+                                    _logger.info('[Webhook TN] order/paid id=%s — orden %s procesada (state=%s, missing_products=%s)', data['id'], order.name, order.state, order.tn_has_missing_products)
+                                except Exception as e:
+                                    _logger.error('[Webhook TN] order/paid id=%s — error en create_order_from_tn: %s', data['id'], str(e), exc_info=True)
+                                else:
+                                    if order.state == 'draft' and not order.tn_has_missing_products and order_json.get('payment_status') not in _TN_TERMINAL_STATUSES:
+                                        order.sudo()._tn_mark_for_payment_polling(order_json)
                         elif order.state == 'draft':
-                            order.sudo()._tn_refresh_order_json(order_json)
-                            order.sudo().with_company(company_id)._confirm_from_tn_paid()
-                            if not order.tn_has_missing_products:
-                                paid_status = (order_json.get('payment_status') or '') if order_json else ''
-                                if paid_status == 'paid':
-                                    order.sudo().with_company(company_id)._tn_apply_payment_config()
-                                elif paid_status not in _TN_TERMINAL_STATUSES and order_json:
-                                    order.sudo()._tn_mark_for_payment_polling(order_json)
+                            _logger.info('[Webhook TN] order/paid id=%s — orden %s en borrador, confirmando', data['id'], order.name)
+                            try:
+                                order.sudo()._tn_refresh_order_json(order_json)
+                                order.sudo().with_company(company_id)._confirm_from_tn_paid()
+                                _logger.info('[Webhook TN] order/paid id=%s — orden %s post-confirm (state=%s, missing_products=%s)', data['id'], order.name, order.state, order.tn_has_missing_products)
+                                if not order.tn_has_missing_products:
+                                    paid_status = (order_json.get('payment_status') or '') if order_json else ''
+                                    if paid_status == 'paid':
+                                        _logger.info('[Webhook TN] order/paid id=%s — aplicando config de pago', data['id'])
+                                        order.sudo().with_company(company_id)._tn_apply_payment_config()
+                                    elif paid_status not in _TN_TERMINAL_STATUSES and order_json:
+                                        _logger.info('[Webhook TN] order/paid id=%s — marcando para polling (payment_status=%s)', data['id'], paid_status)
+                                        order.sudo()._tn_mark_for_payment_polling(order_json)
+                            except Exception as e:
+                                _logger.error('[Webhook TN] order/paid id=%s — error procesando orden en borrador %s: %s', data['id'], order.name, str(e), exc_info=True)
                         else:
+                            _logger.info('[Webhook TN] order/paid id=%s — orden %s ya confirmada (state=%s), sin cambios', data['id'], order.name, order.state)
                             order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada — no se realizaron cambios."))
                         exitoso = True
 
@@ -222,6 +250,10 @@ class TiendaNubeWebHook(http.Controller):
                         status=404
                     )
         except Exception as e:
+            _logger.error(
+                '[Webhook TN] Error no controlado procesando evento=%s id=%s: %s',
+                data.get('event', '?'), data.get('id', '?'), str(e), exc_info=True,
+            )
             request.env['ir.config_parameter'].sudo().set_param(lock_name, 'Disponible')
             return request.make_response(
                 json.dumps({"mensaje": "Error al procesar la solicitud"}),
