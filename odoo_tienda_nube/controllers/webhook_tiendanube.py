@@ -197,7 +197,13 @@ class TiendaNubeWebHook(http.Controller):
                                 if order.state == 'draft' and order_json.get('payment_status') not in _TN_TERMINAL_STATUSES:
                                     order.sudo()._tn_mark_for_payment_polling(order_json)
                         elif order.state == 'draft':
+                            order.sudo()._tn_refresh_order_json(order_json)
                             order.sudo().with_company(company_id)._confirm_from_tn_paid()
+                            paid_status = (order_json.get('payment_status') or '') if order_json else ''
+                            if paid_status == 'paid':
+                                order.sudo().with_company(company_id)._tn_apply_payment_config()
+                            elif paid_status not in _TN_TERMINAL_STATUSES and order_json:
+                                order.sudo()._tn_mark_for_payment_polling(order_json)
                         else:
                             order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada — no se realizaron cambios."))
                         exitoso = True

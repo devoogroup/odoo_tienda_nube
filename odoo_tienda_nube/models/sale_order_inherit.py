@@ -341,6 +341,11 @@ class SaleOrderTiendaNubeInherit(models.Model):
         """Hook: mensaje de chatter cuando la orden queda en borrador."""
         return _("Orden recibida desde Tienda Nube. Estado de pago: %s. Pendiente de confirmación.") % (order.get('payment_status') or '-')
 
+    def _tn_refresh_order_json(self, order_json):
+        """Actualiza json_tn con datos frescos de TN. Extensible para sincronizar campos adicionales."""
+        if order_json and order_json.get('number'):
+            self.write({'json_tn': str(order_json)})
+
     def _tn_mark_for_payment_polling(self, order_json=None):
         """Hook: marcar orden para polling de estado de pago. Implementar en módulos de pago."""
         pass
