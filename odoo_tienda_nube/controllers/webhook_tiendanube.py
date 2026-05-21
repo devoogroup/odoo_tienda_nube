@@ -54,6 +54,11 @@ class TiendaNubeWebHook(http.Controller):
 
         try:
             data = json.loads(request.httprequest.get_data())
+            _logger.info(
+                '[Webhook TN] Payload recibido — event=%s id=%s store_id=%s | IP=%s code_event=%s',
+                data.get('event'), data.get('id'), data.get('store_id'),
+                request.httprequest.remote_addr, kw.get('code_event'),
+            )
 
             # Verificacion de duplicidad
             if self.duplicity_check(data):
@@ -305,10 +310,17 @@ class TiendaNubeWebHook(http.Controller):
                 status=500
             )
         finally:
+            # Commit primero para persistir cambios válidos pendientes (team_id, user_id,
+            # conciliación, etc.) que aún no fueron commiteados. Solo si el commit falla
+            # (transacción en estado ABORTED por error de BD) hacemos rollback para limpiar.
             try:
-                # rollback limpia el estado de transacción abortada (error de BD) sin deshacer
-                # los commits explícitos ya realizados arriba (webhook_received, json_tn, etc.)
-                request.env.cr.rollback()
+                request.env.cr.commit()
+            except Exception:
+                try:
+                    request.env.cr.rollback()
+                except Exception:
+                    pass
+            try:
                 request.env['ir.config_parameter'].sudo().set_param(lock_name, 'Disponible')
                 request.env.cr.commit()
             except Exception as release_err:
