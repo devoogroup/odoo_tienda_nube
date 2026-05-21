@@ -81,6 +81,12 @@ class TiendaNubeWebHook(http.Controller):
                 exitoso = False
 
                 company_id = webhook.company_id if webhook.company_id else None
+                if not webhook:
+                    _logger.warning(
+                        '[Webhook TN] No se encontró webhook.tn para code_event=%s — '
+                        'verificar que el webhook esté registrado en Odoo (evento=%s id=%s)',
+                        code_event, data.get('event'), data.get('id'),
+                    )
                 if webhook:
                     # CATEGORIAS
                     if webhook.event == 'category/updated':
@@ -156,7 +162,7 @@ class TiendaNubeWebHook(http.Controller):
                     # ORDENES
                     # order/created: siempre crea en borrador, nunca confirma
                     elif webhook.event == 'order/created':
-                        _logger.info('[Webhook TN] order/created id=%s', data['id'])
+                        _logger.info('[Webhook TN] order/created — id_tn=%s store_id=%s', data['id'], data.get('store_id'))
                         order = request.env['sale.order'].sudo().search([
                             ('id_tn','=',data['id'])
                             ],limit=1)
@@ -167,10 +173,38 @@ class TiendaNubeWebHook(http.Controller):
                                     'json_tn': json.dumps(order_json, ensure_ascii=False),
                                 })
                                 request.env.cr.commit()
-                            if not order_json or not order_json.get('number'):
-                                _logger.info('[Webhook TN] order/created id=%s ignorada: número de orden inválido (%s)', data['id'], order_json and order_json.get('number'))
+
+                            if not order_json:
+                                _logger.warning(
+                                    '[Webhook TN] order/created id_tn=%s — IGNORADA: no se pudo obtener JSON desde TN '
+                                    '(API falló o devolvió vacío)',
+                                    data['id'],
+                                )
+                            elif not order_json.get('number'):
+                                # TN dispara order/created antes de asignar número (checkout en proceso / carrito abandonado)
+                                customer_email = (
+                                    order_json.get('contact_email')
+                                    or (order_json.get('customer') or {}).get('email', '?')
+                                )
+                                _logger.info(
+                                    '[Webhook TN] order/created id_tn=%s — IGNORADA: sin número de venta TN asignado. '
+                                    'number=%s payment_status=%s status=%s total=%s customer=%s',
+                                    data['id'],
+                                    order_json.get('number'),
+                                    order_json.get('payment_status'),
+                                    order_json.get('status'),
+                                    order_json.get('total'),
+                                    customer_email,
+                                )
                             else:
-                                _logger.info('[Webhook TN] order/created id=%s — creando sale.order', data['id'])
+                                _logger.info(
+                                    '[Webhook TN] order/created id_tn=%s — número TN: %s, payment_status=%s, '
+                                    'total=%s — creando sale.order...',
+                                    data['id'],
+                                    order_json.get('number'),
+                                    order_json.get('payment_status'),
+                                    order_json.get('total'),
+                                )
                                 order = request.env['sale.order'].with_company(company_id).sudo().create({
                                     'id_tn': data['id'],
                                     'partner_id': request.env.company.sudo().partner_id.id,
@@ -178,11 +212,22 @@ class TiendaNubeWebHook(http.Controller):
                                 })
                                 try:
                                     order.sudo().with_company(company_id).create_order_from_tn()
-                                    _logger.info('[Webhook TN] order/created id=%s — orden %s procesada (state=%s)', data['id'], order.name, order.state)
+                                    _logger.info(
+                                        '[Webhook TN] order/created id_tn=%s — orden %s procesada correctamente '
+                                        '(state=%s, missing_products=%s)',
+                                        data['id'], order.name, order.state,
+                                        getattr(order, 'tn_has_missing_products', '?'),
+                                    )
                                 except Exception as e:
-                                    _logger.error('[Webhook TN] order/created id=%s — error en create_order_from_tn: %s', data['id'], str(e), exc_info=True)
+                                    _logger.error(
+                                        '[Webhook TN] order/created id_tn=%s — error en create_order_from_tn: %s',
+                                        data['id'], str(e), exc_info=True,
+                                    )
                         else:
-                            _logger.info('[Webhook TN] order/created id=%s — orden ya existe (%s), ignorando', data['id'], order.name)
+                            _logger.info(
+                                '[Webhook TN] order/created id_tn=%s — orden ya existe (%s, state=%s), ignorando',
+                                data['id'], order.name, order.state,
+                            )
                         exitoso = True
 
                     # order/paid: crea y valida; si existe en borrador, valida
