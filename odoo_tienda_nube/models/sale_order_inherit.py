@@ -57,6 +57,12 @@ class SaleOrderTiendaNubeInherit(models.Model):
     promotions_applied_tn = fields.Text('Promociones aplicadas', help="Promociones aplicadas de Tienda Nube", copy=False)
 
     json_tn = fields.Text('JSON Tienda Nube', help="JSON de Tienda Nube", copy=False)
+    tn_has_missing_products = fields.Boolean(
+        string='Productos TN faltantes',
+        default=False,
+        copy=False,
+        help="La orden tiene productos de Tienda Nube no sincronizados con Odoo. Se mantiene en borrador hasta resolver.",
+    )
 
     # Metodo para crear la orden en Odoo desde TN GET /orders/{id}
     def create_order_from_tn(self):
@@ -189,6 +195,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 self.partner_id = partner.id
                 
                 # Completamos lineas de la orden
+                self.tn_has_missing_products = False  # reset por si es un reprocesamiento
                 missing_lines = []
                 for line in order['products']:
                     product = self.env['product.product'].search([('product_id_tn', '=', line['variant_id'])], limit=1)
@@ -220,6 +227,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         self.id,
                         'error',
                     )
+                    self.tn_has_missing_products = True
 
                 # DESCUENTOS
                 if len(order['coupon']) or len(order['promotional_discount']['promotions_applied']):
@@ -313,7 +321,13 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     self.warehouse_id = warehouse_id.id
 
                 # Verificamos si debemos confirmar la orden
-                if self._tn_should_auto_confirm(order):
+                if missing_lines:
+                    self.message_post(body=_(
+                        "⚠ Orden en borrador: los siguientes productos de Tienda Nube "
+                        "no están sincronizados con Odoo y fueron omitidos. "
+                        "Sincronizar los productos y reprocesar la orden manualmente.\n\n%s"
+                    ) % '\n'.join('• ' + p for p in missing_lines))
+                elif self._tn_should_auto_confirm(order):
                     self.action_confirm()
                     self.message_post(body=self._tn_confirm_message(order))
                 else:
@@ -354,6 +368,13 @@ class SaleOrderTiendaNubeInherit(models.Model):
         """Procesa order/paid para una orden ya existente en borrador.
         Solo confirma según el modo configurado, sin re-procesar líneas ni datos."""
         self.ensure_one()
+        if self.tn_has_missing_products:
+            self.message_post(body=_(
+                "⚠ Pago recibido desde Tienda Nube, pero la orden permanece en borrador: "
+                "tiene productos no sincronizados con Odoo. "
+                "Sincronizar los productos y reprocesar la orden manualmente."
+            ))
+            return
         mode = self.company_id.tn_confirmation_mode
         if mode in ('always', 'paid'):
             self.action_confirm()
