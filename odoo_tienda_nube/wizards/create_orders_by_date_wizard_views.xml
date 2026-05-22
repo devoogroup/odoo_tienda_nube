@@ -6,16 +6,111 @@
             <field name="model">create.orders.by.date.wizard</field>
             <field name="arch" type="xml">
                 <form string="Importar Órdenes por Fecha">
-                    <group>
-                        <h3>Traerá las órdenes de Tienda Nube dentro del rango de fechas indicado. Las órdenes que ya existan en Odoo (por ID de Tienda Nube) no serán duplicadas.</h3>
-                    </group>
-                    <group>
-                        <field name="date_from"/>
-                        <field name="date_to"/>
-                    </group>
+                    <sheet>
+
+                        <!-- Barra de estado -->
+                        <field name="state" widget="statusbar"
+                               statusbar_visible="draft,preview,done"/>
+
+                        <!-- PASO 1: Configuración de fechas -->
+                        <group string="Rango de fechas" invisible="state != 'draft'">
+                            <p class="text-muted">
+                                Se consultarán las órdenes de Tienda Nube en el rango indicado.
+                                Las órdenes ya existentes en Odoo no serán duplicadas.
+                            </p>
+                            <group>
+                                <field name="date_from"/>
+                                <field name="date_to"/>
+                            </group>
+                            <group>
+                                <field name="include_cancelled"/>
+                            </group>
+                        </group>
+
+                        <!-- ESTADÍSTICAS (preview y done) -->
+                        <div class="row text-center mb-3" invisible="state == 'draft'">
+                            <div class="col-4">
+                                <span style="font-size:28px; font-weight:bold; color:#495057;">
+                                    <field name="total_found" readonly="1"/>
+                                </span>
+                                <div class="text-muted small">Encontradas en TN</div>
+                            </div>
+                            <div class="col-4">
+                                <span style="font-size:28px; font-weight:bold; color:#6c757d;">
+                                    <field name="already_in_odoo" readonly="1"/>
+                                </span>
+                                <div class="text-muted small">Ya en Odoo</div>
+                            </div>
+                            <div class="col-4">
+                                <span style="font-size:28px; font-weight:bold; color:#007bff;">
+                                    <field name="to_import" readonly="1"/>
+                                </span>
+                                <div class="text-muted small">A importar</div>
+                            </div>
+                        </div>
+
+                        <!-- RESULTADOS (solo done) -->
+                        <div class="row text-center mb-3" invisible="state != 'done'">
+                            <div class="col-6">
+                                <span style="font-size:28px; font-weight:bold; color:#28a745;">
+                                    <field name="imported_count" readonly="1"/>
+                                </span>
+                                <div class="text-muted small">Importadas</div>
+                            </div>
+                            <div class="col-6">
+                                <span style="font-size:28px; font-weight:bold; color:#dc3545;">
+                                    <field name="error_count" readonly="1"/>
+                                </span>
+                                <div class="text-muted small">Con error</div>
+                            </div>
+                        </div>
+
+                        <!-- TABLA DE ÓRDENES -->
+                        <field name="line_ids" nolabel="1" invisible="state == 'draft'">
+                            <list create="false" edit="false" delete="false"
+                                  decoration-success="import_result == 'imported'"
+                                  decoration-warning="import_result == 'skipped'"
+                                  decoration-danger="import_result == 'error'">
+                                <field name="number_tn" string="#"/>
+                                <field name="date_tn" string="Fecha"/>
+                                <field name="contact_name" string="Comprador"/>
+                                <field name="total" string="Total"/>
+                                <field name="status_tn" string="Estado TN"/>
+                                <field name="payment_status_tn" string="Pago"/>
+                                <field name="in_odoo" string="En Odoo" optional="show"/>
+                                <field name="sale_order_id" string="Orden" optional="show"/>
+                                <field name="import_result" string="Resultado" optional="show"/>
+                                <field name="error_msg" string="Error" optional="show"/>
+                            </list>
+                        </field>
+
+                    </sheet>
+
                     <footer>
-                        <button name="create_orders_by_date" confirm="¿Seguro que quiere importar las órdenes del rango de fechas seleccionado?" string="Importar Órdenes" type="object" class="btn-primary"/>
-                        <button string="Cancelar" class="btn-secondary" special="cancel"/>
+                        <button name="action_check_preview"
+                                string="Verificar Órdenes"
+                                type="object"
+                                class="btn-primary"
+                                invisible="state != 'draft'"/>
+                        <button name="action_import"
+                                string="Importar Órdenes"
+                                type="object"
+                                class="btn-primary"
+                                confirm="¿Confirma la importación de las órdenes pendientes?"
+                                invisible="state != 'preview'"/>
+                        <button name="action_reset"
+                                string="Volver"
+                                type="object"
+                                class="btn-secondary"
+                                invisible="state == 'draft'"/>
+                        <button string="Cancelar"
+                                class="btn-secondary"
+                                special="cancel"
+                                invisible="state == 'done'"/>
+                        <button string="Cerrar"
+                                class="btn-secondary"
+                                special="cancel"
+                                invisible="state != 'done'"/>
                     </footer>
                 </form>
             </field>

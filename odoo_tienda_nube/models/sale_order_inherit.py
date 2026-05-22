@@ -94,7 +94,14 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     created_at = datetime.strptime(order['created_at'], '%Y-%m-%dT%H:%M:%S%z')
                 except ValueError:
                     created_at = datetime.strptime(order['created_at'], '%Y-%m-%dT%H:%M:%S')
-                self.date_order = created_at.strftime('%Y-%m-%d %H:%M:%S')
+                # Convertir a UTC: Odoo almacena datetimes en UTC internamente.
+                # Sin la conversión, la fecha se desplaza según el offset de zona horaria.
+                from datetime import timezone as dt_timezone
+                if created_at.tzinfo is not None:
+                    created_at_utc = created_at.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                else:
+                    created_at_utc = created_at
+                self.date_order = created_at_utc.strftime('%Y-%m-%d %H:%M:%S')
                 self.name = 'Tienda Nube #' + str(order['number']) + ' - ID: ' + str(order['id'])
                 self.json_tn = order
                 self.id_tn = order['id']
@@ -329,6 +336,9 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     ) % '\n'.join('• ' + p for p in missing_lines))
                 elif self._tn_should_auto_confirm(order):
                     self.action_confirm()
+                    # action_confirm() sobreescribe date_order con Datetime.now() via
+                    # _prepare_confirmation_values(). La restauramos con la fecha real de TN (en UTC).
+                    self.date_order = created_at_utc.strftime('%Y-%m-%d %H:%M:%S')
                     self.message_post(body=self._tn_confirm_message(order))
                 else:
                     self.message_post(body=self._tn_pending_message(order))
