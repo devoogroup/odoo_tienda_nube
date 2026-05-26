@@ -169,7 +169,8 @@ class CreateOrdersByDateWizard(models.TransientModel):
                         'id_tn': order_id_tn,
                         'partner_id': public_partner_id,
                     })
-                    new_order.with_context(tn_historical_import=True).create_order_from_tn()
+                    ctx = {'tn_historic_import': True} if getattr(self, 'historic_import', False) else {}
+                    new_order.with_context(**ctx).create_order_from_tn()
                     WizardLine.browse(line_id).write({
                         'import_result': 'imported',
                         'sale_order_id': new_order.id,

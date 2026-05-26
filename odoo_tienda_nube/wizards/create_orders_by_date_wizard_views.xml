@@ -21,8 +21,6 @@
                             <group>
                                 <field name="date_from"/>
                                 <field name="date_to"/>
-                            </group>
-                            <group>
                                 <field name="include_cancelled"/>
                             </group>
                         </group>
