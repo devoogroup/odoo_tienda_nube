@@ -151,8 +151,18 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 elif order['contact_email'] != None:
                     partner = self.env['res.partner'].search([('email', '=', order['contact_email'])], limit=1)
                 if not partner:
-                    # País del partner (para localización/impuestos; la dirección va en el hijo invoice)
+                    # Dirección de facturación (se copia al partner principal solo en la primera creación)
+                    street_parts = [order.get('billing_address') or '']
+                    if order.get('billing_number'):
+                        street_parts.append(order['billing_number'])
+                    street = ' '.join(filter(None, street_parts)) or False
                     country = self.env['res.country'].search([('code', '=', order.get('billing_country'))], limit=1)
+                    state = False
+                    if order.get('billing_province') and country:
+                        state = self.env['res.country.state'].search([
+                            ('name', 'ilike', order['billing_province']),
+                            ('country_id', '=', country.id),
+                        ], limit=1)
                     # Tipo de documento
                     billing_document_type = order.get('billing_document_type') or (order.get('customer') or {}).get('document_type')
                     l10n_latam_id = False
@@ -173,14 +183,17 @@ class SaleOrderTiendaNubeInherit(models.Model):
                             id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', doc_name)], limit=1)
                             if id_type:
                                 l10n_latam_id = id_type.id
-                    # Partner principal: solo identidad (nombre, email, VAT, país)
-                    # La dirección de facturación va en el sub-contacto type='invoice'
                     partner_vals = {
                         'name': order['customer']['name'] if 'customer' in order else order['contact_name'],
                         'email': order['customer']['email'] if 'customer' in order else order['contact_email'],
                         'phone': order['customer']['phone'] if 'customer' in order else order['contact_phone'],
                         'vat': order['customer']['identification'] if 'customer' in order else order['contact_identification'],
                         'company_type': 'person',
+                        'street': street,
+                        'street2': order.get('billing_floor') or False,
+                        'zip': order.get('billing_zipcode') or False,
+                        'city': order.get('billing_city') or False,
+                        'state_id': state.id if state else False,
                         'country_id': country.id if country else False,
                     }
                     if l10n_latam_id:
@@ -456,7 +469,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
         existing = self.env['res.partner'].search([
             ('parent_id', '=', partner.id),
             ('type', '=', 'delivery'),
-            ('street', '=ilike', street_name),
+            ('street', '=ilike', street),   # calle + número completo
             ('city', '=ilike', city),
         ], limit=1)
         if existing:
