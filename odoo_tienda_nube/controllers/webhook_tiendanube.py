@@ -283,8 +283,10 @@ class TiendaNubeWebHook(http.Controller):
                             except Exception as e:
                                 _logger.error('[Webhook TN] order/paid id=%s — error procesando orden en borrador %s: %s', data['id'], order.name, str(e), exc_info=True)
                         else:
-                            _logger.info('[Webhook TN] order/paid id=%s — orden %s ya confirmada (state=%s), sin cambios', data['id'], order.name, order.state)
-                            order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada — no se realizaron cambios."))
+                            _logger.info('[Webhook TN] order/paid id=%s — orden %s ya confirmada (state=%s)', data['id'], order.name, order.state)
+                            if order_json:
+                                order.sudo()._tn_refresh_order_json(order_json)
+                            order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada (state=%s).") % order.state)
                         exitoso = True
 
                 if exitoso:
