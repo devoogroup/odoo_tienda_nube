@@ -151,18 +151,8 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 elif order['contact_email'] != None:
                     partner = self.env['res.partner'].search([('email', '=', order['contact_email'])], limit=1)
                 if not partner:
-                    # Dirección
-                    street_parts = [order.get('billing_address') or '']
-                    if order.get('billing_number'):
-                        street_parts.append(order['billing_number'])
-                    street = ' '.join(filter(None, street_parts)) or False
+                    # País del partner (para localización/impuestos; la dirección va en el hijo invoice)
                     country = self.env['res.country'].search([('code', '=', order.get('billing_country'))], limit=1)
-                    state = False
-                    if order.get('billing_province') and country:
-                        state = self.env['res.country.state'].search([
-                            ('name', 'ilike', order['billing_province']),
-                            ('country_id', '=', country.id),
-                        ], limit=1)
                     # Tipo de documento
                     billing_document_type = order.get('billing_document_type') or (order.get('customer') or {}).get('document_type')
                     l10n_latam_id = False
@@ -183,24 +173,32 @@ class SaleOrderTiendaNubeInherit(models.Model):
                             id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', doc_name)], limit=1)
                             if id_type:
                                 l10n_latam_id = id_type.id
+                    # Partner principal: solo identidad (nombre, email, VAT, país)
+                    # La dirección de facturación va en el sub-contacto type='invoice'
                     partner_vals = {
                         'name': order['customer']['name'] if 'customer' in order else order['contact_name'],
                         'email': order['customer']['email'] if 'customer' in order else order['contact_email'],
                         'phone': order['customer']['phone'] if 'customer' in order else order['contact_phone'],
                         'vat': order['customer']['identification'] if 'customer' in order else order['contact_identification'],
                         'company_type': 'person',
-                        'street': street,
-                        'street2': order.get('billing_floor') or False,
-                        'zip': order.get('billing_zipcode') or False,
-                        'city': order.get('billing_city') or False,
-                        'state_id': state.id if state else False,
                         'country_id': country.id if country else False,
                     }
                     if l10n_latam_id:
                         partner_vals['l10n_latam_identification_type_id'] = l10n_latam_id
                     partner = self.env['res.partner'].create(partner_vals)
+                # Sub-contacto facturación: siempre creamos/buscamos un hijo type='invoice'
+                invoice_partner = self._tn_get_or_create_invoice_partner(partner, order)
                 self.partner_id = partner.id
-                
+                self.partner_invoice_id = invoice_partner.id
+                # Default envío = facturación; se sobreescribe abajo si las direcciones difieren
+                self.partner_shipping_id = invoice_partner.id
+                # Sub-contacto entrega: solo cuando TN indica direcciones distintas
+                _shipping_address = order.get('shipping_address') or {}
+                if not order.get('same_billing_and_shipping_address', True) and _shipping_address.get('address'):
+                    _delivery_partner = self._tn_get_or_create_delivery_partner(partner, _shipping_address)
+                    if _delivery_partner:
+                        self.partner_shipping_id = _delivery_partner.id
+
                 # Completamos lineas de la orden
                 self.tn_has_missing_products = False  # reset por si es un reprocesamiento
                 missing_lines = []
@@ -401,3 +399,88 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 'Evento order/paid recibido. Modo "Nunca confirmar": la orden no se confirma automáticamente.',
                 'sale.order', self.id, 'success',
             )
+
+    def _tn_get_or_create_invoice_partner(self, partner, order):
+        """Busca o crea un partner hijo tipo 'invoice' con los datos de facturación de TN.
+
+        Reutiliza el primer hijo de tipo 'invoice' existente si ya hay uno.
+        """
+        existing = self.env['res.partner'].search([
+            ('parent_id', '=', partner.id),
+            ('type', '=', 'invoice'),
+        ], limit=1)
+        if existing:
+            return existing
+
+        street_parts = [order.get('billing_address') or '']
+        if order.get('billing_number'):
+            street_parts.append(order['billing_number'])
+        street = ' '.join(filter(None, street_parts)) or False
+
+        country = self.env['res.country'].search([('code', '=', order.get('billing_country'))], limit=1)
+        state = False
+        if order.get('billing_province') and country:
+            state = self.env['res.country.state'].search([
+                ('name', 'ilike', order['billing_province']),
+                ('country_id', '=', country.id),
+            ], limit=1)
+
+        name = order.get('billing_name') or partner.name
+        return self.env['res.partner'].create({
+            'name': name,
+            'type': 'invoice',
+            'parent_id': partner.id,
+            'phone': order.get('billing_phone') or partner.phone or False,
+            'street': street or False,
+            'street2': order.get('billing_floor') or False,
+            'zip': order.get('billing_zipcode') or False,
+            'city': order.get('billing_city') or False,
+            'state_id': state.id if state else False,
+            'country_id': country.id if country else False,
+        })
+
+    def _tn_get_or_create_delivery_partner(self, partner, shipping_data):
+        """Busca o crea un partner hijo tipo 'delivery' para la dirección de envío TN.
+
+        Reutiliza un hijo existente si ya hay uno con la misma calle y ciudad.
+        shipping_data: dict shipping_address del JSON de TN.
+        """
+        street_name = shipping_data.get('address') or ''
+        street_number = shipping_data.get('number') or ''
+        street = ('%s %s' % (street_name, street_number)).strip() or False
+        city = shipping_data.get('city') or ''
+
+        if not street_name and not city:
+            return False
+
+        existing = self.env['res.partner'].search([
+            ('parent_id', '=', partner.id),
+            ('type', '=', 'delivery'),
+            ('street', '=ilike', street_name),
+            ('city', '=ilike', city),
+        ], limit=1)
+        if existing:
+            return existing
+
+        country_code = shipping_data.get('country') or ''
+        country = self.env['res.country'].search([('code', '=', country_code)], limit=1)
+        state = False
+        if shipping_data.get('province') and country:
+            state = self.env['res.country.state'].search([
+                ('name', 'ilike', shipping_data['province']),
+                ('country_id', '=', country.id),
+            ], limit=1)
+
+        name = shipping_data.get('name') or partner.name
+        return self.env['res.partner'].create({
+            'name': name,
+            'type': 'delivery',
+            'parent_id': partner.id,
+            'phone': shipping_data.get('phone') or partner.phone or False,
+            'street': street or False,
+            'street2': shipping_data.get('floor') or False,
+            'zip': shipping_data.get('zipcode') or False,
+            'city': city or False,
+            'state_id': state.id if state else False,
+            'country_id': country.id if country else False,
+        })
