@@ -485,13 +485,19 @@ class SaleOrderTiendaNubeInherit(models.Model):
             ], limit=1)
 
         name = shipping_data.get('name') or partner.name
+        street2_parts = filter(None, [
+            shipping_data.get('floor') or '',
+            shipping_data.get('locality') or '',
+        ])
+        street2 = ', '.join(street2_parts) or False
+
         return self.env['res.partner'].create({
             'name': name,
             'type': 'delivery',
             'parent_id': partner.id,
             'phone': shipping_data.get('phone') or partner.phone or False,
             'street': street or False,
-            'street2': shipping_data.get('floor') or False,
+            'street2': street2,
             'zip': shipping_data.get('zipcode') or False,
             'city': city or False,
             'state_id': state.id if state else False,
