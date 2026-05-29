@@ -205,15 +205,9 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 self.partner_invoice_id = invoice_partner.id
                 # Default envío = facturación; se sobreescribe abajo si las direcciones difieren
                 self.partner_shipping_id = invoice_partner.id
-                # Sub-contacto entrega: crear cuando la dirección de envío difiere de la de facturación.
-                # No usamos el flag same_billing_and_shipping_address (puede estar ausente en el JSON de TN);
-                # en su lugar comparamos directamente calle y ciudad.
+                # Sub-contacto entrega: si TN provee shipping_address con calle, creamos/buscamos el hijo
                 _shipping_address = order.get('shipping_address') or {}
-                _sh_street = (_shipping_address.get('address') or '').strip().lower()
-                _sh_city   = (_shipping_address.get('city') or '').strip().lower()
-                _bl_street = (order.get('billing_address') or '').strip().lower()
-                _bl_city   = (order.get('billing_city') or '').strip().lower()
-                if _sh_street and (_sh_street != _bl_street or _sh_city != _bl_city):
+                if _shipping_address.get('address'):
                     _delivery_partner = self._tn_get_or_create_delivery_partner(partner, _shipping_address)
                     if _delivery_partner:
                         self.partner_shipping_id = _delivery_partner.id
