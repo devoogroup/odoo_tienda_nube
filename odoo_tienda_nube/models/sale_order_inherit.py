@@ -1,7 +1,7 @@
 import logging
 import requests
 import base64
-                
+
 from datetime import datetime
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
@@ -36,7 +36,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
     billing_trade_name_tn = fields.Char('Nombre Comercial', help="Nombre Comercial de Tienda Nube", copy=False)
     billing_state_registration_tn = fields.Char('Inscripcion Estatal', help="Inscripcion Estatal de Tienda Nube", copy=False)
     billing_document_type_tn = fields.Char('Tipo de documento', help="Tipo de documento de Tienda Nube", copy=False)
-    
+
     # Shipping
     shipping_min_days_tn = fields.Char('Minimo de dias de envio', help="Minimo de dias de envio de Tienda Nube", copy=False)
     shipping_max_days_tn = fields.Char('Maximo de dias de envio', help="Maximo de dias de envio de Tienda Nube", copy=False)
@@ -129,8 +129,8 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 self.billing_trade_name_tn = order['billing_trade_name'] if order['billing_trade_name'] != "None" else False
                 self.billing_state_registration_tn = order['billing_state_registration'] if order['billing_state_registration'] != "None" else False
                 self.billing_document_type_tn = order['billing_document_type'] if order['billing_document_type'] != "None" else False
-                self.shipping_cost_owner_tn = float(order['shipping_cost_owner'])
-                self.shipping_cost_customer_tn = float(order['shipping_cost_customer'])
+                self.shipping_cost_owner_tn = float(order['shipping_cost_owner']) if order['shipping_cost_owner'] else 0
+                self.shipping_cost_customer_tn = float(order['shipping_cost_customer']) if order['shipping_cost_customer'] else 0
                 self.shipping_tn = order['shipping']
                 self.shipping_min_days_tn = order['shipping_min_days']
                 self.shipping_max_days_tn = order['shipping_max_days']
@@ -309,14 +309,14 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 'product_uom_qty': -1,
                                 'price_unit': discount_promo_amount,
                             })
-                            
+
                 # ENVIO
                 product_shipping_tn = self.env.ref('odoo_tienda_nube.product_shipping_tn')
                 if not product_shipping_tn:
                     raise ValidationError(_("Producto de envio no encontrado en Odoo"))
-                
+
                 #Verificamos si tenemos que quitar impuestos
-                price_shipping = float(order['shipping_cost_customer'])
+                price_shipping = float(order['shipping_cost_customer']) if order['shipping_cost_customer'] else 0
                 if self.company_id.tn_type_tax == 'not_included' and price_shipping > 0:
                     value_tax = (((product_shipping_tn.taxes_id.compute_all(price_shipping)['total_included']) * 100) / (product_shipping_tn.taxes_id.compute_all(price_shipping)['total_excluded'])) / 100
                     if value_tax:
