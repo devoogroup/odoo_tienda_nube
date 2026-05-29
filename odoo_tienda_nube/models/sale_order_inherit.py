@@ -303,7 +303,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 if value_tax:
                                     discount_promo_amount = discount_promo_amount / value_tax
                             self.env['sale.order.line'].create({
-                                'name': 'Promoción ' + promotions_applied['discount_script_type'],
+                                'name': 'Promoción %s' % (promotions_applied.get('discount_script_type') or ''),
                                 'order_id': self.id,
                                 'product_id': product_discount_tn.id,
                                 'product_uom_qty': -1,
@@ -323,7 +323,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         price_shipping = price_shipping / value_tax
 
                 self.env['sale.order.line'].create({
-                    'name': 'Costo de Envío (' + order['shipping_option'] + ')',
+                    'name': 'Costo de Envío (%s)' % (order.get('shipping_option') or ''),
                     'order_id': self.id,
                     'product_id': product_shipping_tn.id,
                     'product_uom_qty': 1,
