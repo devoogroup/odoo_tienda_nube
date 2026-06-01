@@ -298,7 +298,8 @@ class TiendaNubeResCompanyInherit(models.Model):
                     price_tn = variant.list_price
                 if self.tn_type_tax == 'not_included':
                     price_tn = variant.taxes_id.compute_all(price_tn)['total_included']
-                stock_variant = variant.qty_available if self.tn_config_stock == 'stock' else variant.virtual_available
+                stock_tn_variant = variant.with_context(warehouse_id=wharehouse.ids)
+                stock_variant = stock_tn_variant.qty_available if self.tn_config_stock == 'stock' else stock_tn_variant.virtual_available
                 if stock_variant < 0:
                     stock_variant = 0
                 data = {
@@ -450,7 +451,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                     # Obtenemos stock de la ubicacion para el producto filtrando por qty_available o virtual_available para la ubicacion
                     warehouse = self.env['stock.warehouse'].search([('location_id_tn', '=', location)])
                     if warehouse:
-                        variant = variant.with_context(warehouse=warehouse.ids)
+                        variant = variant.with_context(warehouse_id=warehouse.id)
                     if not variant.stock_ilimitado_tn:
                         stock_variant = int(variant.qty_available) if self.tn_config_stock == 'stock' else int(variant.virtual_available)
                         if stock_variant < 0:
@@ -569,7 +570,8 @@ class TiendaNubeResCompanyInherit(models.Model):
                 price_tn = variant.list_price
             if self.tn_type_tax == 'not_included':
                 price_tn = variant.taxes_id.compute_all(price_tn)['total_included']
-            stock_variant = variant.qty_available if self.tn_config_stock == 'stock' else variant.virtual_available
+            stock_tn_variant = variant.with_context(warehouse_id=wharehouse.ids)
+            stock_variant = stock_tn_variant.qty_available if self.tn_config_stock == 'stock' else stock_tn_variant.virtual_available
             if stock_variant < 0:
                 stock_variant = 0
             variants.append({
