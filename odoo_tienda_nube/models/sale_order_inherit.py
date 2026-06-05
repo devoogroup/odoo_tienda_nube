@@ -144,12 +144,18 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 self.shipping_store_branch_extra_tn = order['shipping_store_branch_extra']
                 self.shipping_pickup_type_tn = order['shipping_pickup_type']
 
-                # Buscamos el cliente
+                # Buscamos el cliente (solo activos, excluyendo subcontactos)
                 partner = self.env['res.partner']
+                _partner_base_domain = [
+                    ('active', '=', True),
+                    ('type', 'in', ['contact', False]),
+                ]
                 if order['contact_identification'] != None:
-                    partner = self.env['res.partner'].search([('vat', '=', order['contact_identification'])], limit=1)
+                    partner = self.env['res.partner'].search(
+                        _partner_base_domain + [('vat', '=', order['contact_identification'])], limit=1)
                 elif order['contact_email'] != None:
-                    partner = self.env['res.partner'].search([('email', '=', order['contact_email'])], limit=1)
+                    partner = self.env['res.partner'].search(
+                        _partner_base_domain + [('email', '=', order['contact_email'])], limit=1)
                 if not partner:
                     # Dirección de facturación (se copia al partner principal solo en la primera creación)
                     street_parts = [order.get('billing_address') or '']
@@ -183,6 +189,10 @@ class SaleOrderTiendaNubeInherit(models.Model):
                             id_type = self.env['l10n_latam.identification.type'].search([('name', 'ilike', doc_name)], limit=1)
                             if id_type:
                                 l10n_latam_id = id_type.id
+                    _billing_street2_parts = filter(None, [
+                        order.get('billing_floor') or '',
+                        order.get('billing_locality') or '',
+                    ])
                     partner_vals = {
                         'name': order['customer']['name'] if 'customer' in order else order['contact_name'],
                         'email': order['customer']['email'] if 'customer' in order else order['contact_email'],
@@ -190,7 +200,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         'vat': order['customer']['identification'] if 'customer' in order else order['contact_identification'],
                         'company_type': 'person',
                         'street': street,
-                        'street2': order.get('billing_floor') or False,
+                        'street2': ', '.join(_billing_street2_parts) or False,
                         'zip': order.get('billing_zipcode') or False,
                         'city': order.get('billing_city') or False,
                         'state_id': state.id if state else False,
@@ -416,19 +426,32 @@ class SaleOrderTiendaNubeInherit(models.Model):
     def _tn_get_or_create_invoice_partner(self, partner, order):
         """Busca o crea un partner hijo tipo 'invoice' con los datos de facturación de TN.
 
-        Reutiliza el primer hijo de tipo 'invoice' existente si ya hay uno.
+        Deduplicación por calle + ciudad (igual que delivery). Fallback a cualquier
+        hijo invoice existente para no romper clientes migrados sin dirección en el hijo.
         """
-        existing = self.env['res.partner'].search([
-            ('parent_id', '=', partner.id),
-            ('type', '=', 'invoice'),
-        ], limit=1)
-        if existing:
-            return existing
-
         street_parts = [order.get('billing_address') or '']
         if order.get('billing_number'):
             street_parts.append(order['billing_number'])
         street = ' '.join(filter(None, street_parts)) or False
+        billing_city = order.get('billing_city') or ''
+        billing_zip = order.get('billing_zipcode') or False
+
+        # Búsqueda precisa: misma calle + ciudad + código postal
+        existing = self.env['res.partner'].search([
+            ('parent_id', '=', partner.id),
+            ('type', '=', 'invoice'),
+            ('street', '=ilike', street),
+            ('city', '=ilike', billing_city),
+            ('zip', '=', billing_zip),
+        ], limit=1)
+        # Fallback: cualquier hijo invoice (retrocompatibilidad)
+        if not existing:
+            existing = self.env['res.partner'].search([
+                ('parent_id', '=', partner.id),
+                ('type', '=', 'invoice'),
+            ], limit=1)
+        if existing:
+            return existing
 
         country = self.env['res.country'].search([('code', '=', order.get('billing_country'))], limit=1)
         state = False
@@ -439,13 +462,17 @@ class SaleOrderTiendaNubeInherit(models.Model):
             ], limit=1)
 
         name = order.get('billing_name') or partner.name
+        street2_parts = filter(None, [
+            order.get('billing_floor') or '',
+            order.get('billing_locality') or '',
+        ])
         return self.env['res.partner'].create({
             'name': name,
             'type': 'invoice',
             'parent_id': partner.id,
             'phone': order.get('billing_phone') or partner.phone or False,
             'street': street or False,
-            'street2': order.get('billing_floor') or False,
+            'street2': ', '.join(street2_parts) or False,
             'zip': order.get('billing_zipcode') or False,
             'city': order.get('billing_city') or False,
             'state_id': state.id if state else False,
