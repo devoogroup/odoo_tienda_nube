@@ -289,6 +289,24 @@ class TiendaNubeWebHook(http.Controller):
                             order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada (state=%s).") % order.state)
                         exitoso = True
 
+                    # order/cancelled: registra el webhook y delega lógica al modelo
+                    elif webhook.event == 'order/cancelled':
+                        _logger.info('[Webhook TN] order/cancelled id=%s', data['id'])
+                        order = request.env['sale.order'].sudo().search([
+                            ('id_tn', '=', data['id'])
+                        ], limit=1)
+                        order_json = self._fetch_order_json_tn(company_id, data['id'])
+                        if order_json and webhook_received_id:
+                            request.env['webhook.tn.received'].sudo().browse(webhook_received_id).write({
+                                'json_tn': json.dumps(order_json, ensure_ascii=False),
+                            })
+                            request.env.cr.commit()
+                        if order:
+                            order.sudo().with_company(company_id)._tn_handle_order_cancelled(order_json)
+                        else:
+                            _logger.info('[Webhook TN] order/cancelled id=%s — no existe en Odoo, sin acción', data['id'])
+                        exitoso = True
+
                 if exitoso:
                     return request.make_response(
                         json.dumps({"mensaje": "Operación exitosa"}),

@@ -395,6 +395,10 @@ class SaleOrderTiendaNubeInherit(models.Model):
         """Hook: marcar orden para polling de estado de pago. Implementar en módulos de pago."""
         pass
 
+    def _tn_handle_order_cancelled(self, order_json=None):
+        """Hook: manejar webhook order/cancelled. Sobreescribir en módulos específicos."""
+        pass
+
     def _confirm_from_tn_paid(self):
         """Procesa order/paid para una orden ya existente en borrador.
         Solo confirma según el modo configurado, sin re-procesar líneas ni datos."""
