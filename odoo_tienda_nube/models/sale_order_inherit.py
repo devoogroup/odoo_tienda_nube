@@ -433,12 +433,12 @@ class SaleOrderTiendaNubeInherit(models.Model):
         Deduplicación por calle + ciudad (igual que delivery). Fallback a cualquier
         hijo invoice existente para no romper clientes migrados sin dirección en el hijo.
         """
-        street_parts = [order.get('billing_address') or '']
+        street_parts = [order.get('billing_address', "").strip() or '']
         if order.get('billing_number'):
-            street_parts.append(order['billing_number'])
+            street_parts.append(order['billing_number'].strip())
         street = ' '.join(filter(None, street_parts)) or False
-        billing_city = order.get('billing_city') or ''
-        billing_zip = order.get('billing_zipcode') or False
+        billing_city = order.get('billing_city', "").strip() or ''
+        billing_zip = order.get('billing_zipcode', "").strip() or False
 
         # Búsqueda precisa: misma calle + ciudad + código postal
         existing = self.env['res.partner'].search([
@@ -448,12 +448,6 @@ class SaleOrderTiendaNubeInherit(models.Model):
             ('city', '=ilike', billing_city),
             ('zip', '=', billing_zip),
         ], limit=1)
-        # Fallback: cualquier hijo invoice (retrocompatibilidad)
-        if not existing:
-            existing = self.env['res.partner'].search([
-                ('parent_id', '=', partner.id),
-                ('type', '=', 'invoice'),
-            ], limit=1)
         if existing:
             return existing
 
@@ -465,7 +459,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 ('country_id', '=', country.id),
             ], limit=1)
 
-        name = order.get('billing_name') or partner.name
+        name = order.get('billing_name', "").strip() or partner.name
         street2_parts = filter(None, [
             order.get('billing_floor') or '',
             order.get('billing_locality') or '',
@@ -474,11 +468,11 @@ class SaleOrderTiendaNubeInherit(models.Model):
             'name': name,
             'type': 'invoice',
             'parent_id': partner.id,
-            'phone': order.get('billing_phone') or partner.phone or False,
+            'phone': order.get('billing_phone', "").strip() or partner.phone or False,
             'street': street or False,
             'street2': ', '.join(street2_parts) or False,
-            'zip': order.get('billing_zipcode') or False,
-            'city': order.get('billing_city') or False,
+            'zip': order.get('billing_zipcode', "").strip() or False,
+            'city': order.get('billing_city', "").strip() or False,
             'state_id': state.id if state else False,
             'country_id': country.id if country else False,
         })
@@ -489,10 +483,10 @@ class SaleOrderTiendaNubeInherit(models.Model):
         Reutiliza un hijo existente si ya hay uno con la misma calle y ciudad.
         shipping_data: dict shipping_address del JSON de TN.
         """
-        street_name = shipping_data.get('address') or ''
-        street_number = shipping_data.get('number') or ''
+        street_name = shipping_data.get('address', "").strip() or ''
+        street_number = shipping_data.get('number', "").strip() or ''
         street = ('%s %s' % (street_name, street_number)).strip() or False
-        city = shipping_data.get('city') or ''
+        city = shipping_data.get('city').strip() or ''
 
         if not street_name and not city:
             return False
