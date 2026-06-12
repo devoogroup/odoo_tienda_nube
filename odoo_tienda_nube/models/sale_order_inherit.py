@@ -509,7 +509,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 ('country_id', '=', country.id),
             ], limit=1)
 
-        name = shipping_data.get('name') or partner.name
+        name = shipping_data.get('name', "").strip() or partner.name
         street2_parts = filter(None, [
             shipping_data.get('floor') or '',
             shipping_data.get('locality') or '',
