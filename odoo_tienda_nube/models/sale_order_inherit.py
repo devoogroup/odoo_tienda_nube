@@ -357,9 +357,6 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     ) % '\n'.join('• ' + p for p in missing_lines))
                 elif self._tn_should_auto_confirm(order):
                     self.action_confirm()
-                    # action_confirm() sobreescribe date_order con Datetime.now() via
-                    # _prepare_confirmation_values(). La restauramos con la fecha real de TN (en UTC).
-                    self.date_order = created_at_utc.strftime('%Y-%m-%d %H:%M:%S')
                     self.message_post(body=self._tn_confirm_message(order))
                 else:
                     self.message_post(body=self._tn_pending_message(order))
