@@ -6,6 +6,9 @@
             <field name="model">sale.order</field>
             <field name="inherit_id" ref="sale.view_order_form"/>
             <field name="arch" type="xml">
+                <xpath expr="//group[@name='order_details']/field[@name='show_update_pricelist']" position="before">
+                    <field name="date_order_tn" readonly="1"/>
+                </xpath>
                 <notebook position="inside">
                     <page string="Tienda Nube" name="tienda_nube_page">
                         <button name="create_order_from_tn" string="Crear / Actualizar orden desde Tienda Nube" type="object" class="oe_highlight" invisible="state != 'draft'"/>

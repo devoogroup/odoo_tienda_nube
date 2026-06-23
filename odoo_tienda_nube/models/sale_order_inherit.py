@@ -12,6 +12,15 @@ class SaleOrderTiendaNubeInherit(models.Model):
     _inherit = "sale.order"
 
     id_tn = fields.Char('ID Tienda Nube', help="ID de Tienda Nube", copy=False)
+    date_order_tn = fields.Datetime(
+        'Fecha de Orden TN',
+        help="Fecha real de creación de la orden en Tienda Nube (UTC). "
+             "No sobreescribe la Fecha de Orden nativa de Odoo, ya que esta última "
+             "es recalculada por Odoo al confirmar la orden (action_confirm) y modificarla "
+             "manualmente puede provocar inconsistencias en otros procesos (facturación, periodos contables, etc).",
+        copy=False,
+        tracking=True,
+    )
     number_tn = fields.Char('Numero de orden', help="Numero de orden de Tienda Nube", copy=False)
     token_tn = fields.Char('Token Tienda Nube', help="Token de Tieanda Nube", copy=False)
     store_id_tn = fields.Char('Store ID Tienda Nube', help="Store ID de Tienda Nube", copy=False)
@@ -101,7 +110,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     created_at_utc = created_at.astimezone(dt_timezone.utc).replace(tzinfo=None)
                 else:
                     created_at_utc = created_at
-                self.date_order = created_at_utc.strftime('%Y-%m-%d %H:%M:%S')
+                self.date_order_tn = created_at_utc.strftime('%Y-%m-%d %H:%M:%S')
                 self.name = 'Tienda Nube #' + str(order['number']) + ' - ID: ' + str(order['id'])
                 self.json_tn = order
                 self.id_tn = order['id']
