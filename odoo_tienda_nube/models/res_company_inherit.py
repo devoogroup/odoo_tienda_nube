@@ -459,7 +459,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                     if warehouse:
                         variant = variant.with_context(warehouse=warehouse.ids)
                     if not variant.stock_ilimitado_tn:
-                        stock_variant = int(variant.qty_available) if self.tn_config_stock == 'stock' else int(variant.virtual_available)
+                        stock_variant = int(variant.free_qty) if self.tn_config_stock == 'stock' else int(variant.virtual_available)
                         if stock_variant < 0:
                             stock_variant = 0
                     else:
@@ -576,7 +576,7 @@ class TiendaNubeResCompanyInherit(models.Model):
                 price_tn = variant.list_price
             if self.tn_type_tax == 'not_included':
                 price_tn = variant.taxes_id.compute_all(price_tn)['total_included']
-            stock_variant = variant.qty_available if self.tn_config_stock == 'stock' else variant.virtual_available
+            stock_variant = variant.free_qty if self.tn_config_stock == 'stock' else variant.virtual_available
             if stock_variant < 0:
                 stock_variant = 0
             variants.append({
