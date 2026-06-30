@@ -479,10 +479,21 @@ class TiendaNubeResCompanyInherit(models.Model):
             })
     
         batches = self._split_batches(data_products, 40)
-        
-        for batch in batches:
+        _logger.info("TN stock sync: %d productos en %d lotes", total_variants, len(batches))
+
+        for i, batch in enumerate(batches):
             response = requests.patch(url, headers=headers, json=batch)
-            if response.status_code != 200:
+            _logger.info(
+                "TN stock sync lote %d/%d → HTTP %s: %s",
+                i + 1, len(batches), response.status_code, response.text[:300],
+            )
+            if response.status_code == 429:
+                _logger.warning(
+                    "TN stock sync: Too Many Requests (429) en lote %d. "
+                    "Considerar aumentar el intervalo del cron o activar stock en tiempo real.",
+                    i + 1,
+                )
+            elif response.status_code != 200:
                 raise ValidationError('Error al actualizar stock de Tienda Nube: %s' % response.text)
 
     # Obtnenemos todas las categorias de Tienda Nube GET /categories
