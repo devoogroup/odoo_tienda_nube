@@ -482,6 +482,10 @@ class TiendaNubeResCompanyInherit(models.Model):
         _logger.info("TN stock sync: %d productos en %d lotes", total_variants, len(batches))
 
         for i, batch in enumerate(batches):
+            _logger.info(
+                "TN stock sync lote %d/%d → enviando: %s",
+                i + 1, len(batches), str(batch)[:500],
+            )
             response = requests.patch(url, headers=headers, json=batch)
             _logger.info(
                 "TN stock sync lote %d/%d → HTTP %s: %s",
