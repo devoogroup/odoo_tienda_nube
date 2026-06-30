@@ -453,24 +453,24 @@ class TiendaNubeResCompanyInherit(models.Model):
         for product in products:
             data_variants = []
             for variant in product.product_variant_ids.filtered(lambda x: x.product_id_tn != False):
+                inventory_levels = []
                 for location in location_id_tn:
-                    # Obtenemos stock de la ubicacion para el producto filtrando por qty_available o virtual_available para la ubicacion
                     warehouse = self.env['stock.warehouse'].search([('location_id_tn', '=', location)])
-                    if warehouse:
-                        variant = variant.with_context(warehouse=warehouse.ids)
-                    if not variant.stock_ilimitado_tn:
-                        stock_variant = int(variant.free_qty) if self.tn_config_stock == 'stock' else int(variant.virtual_available)
+                    variant_ctx = variant.with_context(warehouse=warehouse.id) if warehouse else variant
+                    if not variant_ctx.stock_ilimitado_tn:
+                        stock_variant = int(variant_ctx.free_qty) if self.tn_config_stock == 'stock' else int(variant_ctx.virtual_available)
                         if stock_variant < 0:
                             stock_variant = 0
                     else:
                         stock_variant = ""
-                    data_variants.append({
-                        'id': int(variant.product_id_tn),
-                        "inventory_levels": [{
-                            "location_id": location,
-                            "stock": stock_variant,
-                        }]
+                    inventory_levels.append({
+                        "location_id": location,
+                        "stock": stock_variant,
                     })
+                data_variants.append({
+                    'id': int(variant.product_id_tn),
+                    "inventory_levels": inventory_levels,
+                })
             
             total_variants += len(data_variants)
             data_products.append({
