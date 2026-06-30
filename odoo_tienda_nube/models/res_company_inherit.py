@@ -455,8 +455,11 @@ class TiendaNubeResCompanyInherit(models.Model):
             for variant in product.product_variant_ids.filtered(lambda x: x.product_id_tn != False):
                 inventory_levels = []
                 for location in location_id_tn:
-                    warehouse = self.env['stock.warehouse'].search([('location_id_tn', '=', location)])
-                    variant_ctx = variant.with_context(warehouse=warehouse.id) if warehouse else variant
+                    warehouse = self.env['stock.warehouse'].search([('location_id_tn', '=', location)], limit=1)
+                    if warehouse:
+                        variant_ctx = variant.with_context(location=warehouse.lot_stock_id.id)
+                    else:
+                        variant_ctx = variant
                     if not variant_ctx.stock_ilimitado_tn:
                         stock_variant = int(variant_ctx.free_qty) if self.tn_config_stock == 'stock' else int(variant_ctx.virtual_available)
                         if stock_variant < 0:
