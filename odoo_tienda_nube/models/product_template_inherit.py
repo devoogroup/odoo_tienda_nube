@@ -10,6 +10,13 @@ class TiendaNubeProductTemplateInherit(models.Model):
     _inherit = "product.template"
 
     id_tn = fields.Char('ID Tienda Nube', help="ID de Tienda Nube", copy=False)
+    product_id_tn = fields.Char(
+        'ID Variante Tienda Nube',
+        help="ID de la variante en Tienda Nube (product.product). Se sincroniza automáticamente con la variante única cuando no hay variantes activas.",
+        compute='_compute_product_id_tn',
+        inverse='_set_product_id_tn',
+        copy=False,
+    )
     envio_gratis_tn = fields.Boolean('Envio Gratis Tienda Nube', help="Indica si el producto tiene envio gratis en Tienda Nube")
     mostrar_en_tienda_tn = fields.Boolean('Mostrar en Tienda Nube', help="Indica si el producto se mostrará en Tienda Nube")
     categoria_tn_ids = fields.Many2many('category.tn', string='Categorias Tienda Nube', help="Categorias de Tienda Nube")
@@ -218,6 +225,31 @@ class TiendaNubeProductTemplateInherit(models.Model):
             archived_variants = self.with_context(active_test=False).product_variant_ids
             if len(archived_variants) == 1:
                 archived_variants.peso_tn = self.peso_tn
+
+    # product_id_tn
+    @api.depends('product_variant_ids.product_id_tn')
+    def _compute_product_id_tn(self):
+        for template in self:
+            variant = template._get_single_variant()
+            template.product_id_tn = variant.product_id_tn if variant else False
+
+    def _set_product_id_tn(self):
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.product_id_tn = template.product_id_tn
+
+    def _get_single_variant(self):
+        """Devuelve la variante única activa, o la archivada si solo hay una."""
+        self.ensure_one()
+        variants = self.product_variant_ids
+        if len(variants) == 1:
+            return variants
+        if not variants:
+            archived = self.with_context(active_test=False).product_variant_ids
+            if len(archived) == 1:
+                return archived
+        return self.env['product.product']
 
     # Sobreescribimos unlink para que no se pueda borrar producto de descuento de Tienda Nube
     def unlink(self):
