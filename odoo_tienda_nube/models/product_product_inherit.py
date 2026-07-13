@@ -30,7 +30,7 @@ class TiendaNubeProductProductInherit(models.Model):
         ('unisex', 'Unisex'),
         ('male', 'Masculino'),
         ('female', 'Femenino'),
-    ], string='Sexo', help="Sexo en Tienda Nube", default='unisex')
+    ], string='Sexo', help="Sexo en Tienda Nube")
 
     # Sobreescribimos unlink para que no se pueda borrar producto de descuento y envio de Tienda Nube
     def unlink(self):

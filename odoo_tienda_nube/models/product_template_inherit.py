@@ -42,7 +42,7 @@ class TiendaNubeProductTemplateInherit(models.Model):
         ('unisex', 'Unisex'),
         ('male', 'Masculino'),
         ('female', 'Femenino'),
-    ], string='Sexo', help="Sexo en Tienda Nube", default='unisex', compute='_compute_sexo_tn', inverse='_set_sexo_tn')
+    ], string='Sexo', help="Sexo en Tienda Nube", compute='_compute_sexo_tn', inverse='_set_sexo_tn')
     contemplar_imagen_variantes_tn = fields.Boolean('Contemplar imagen de variantes en Tienda Nube', help="Indica si se debe contemplar la imagen de las variantes al crear el producto o actualizar imagenes en Tienda Nube", default=True)
     product_template_image_tn_ids = fields.One2many('product.image.tn', 'product_tmpl_tn_id', 'Imagenes de Tienda Nube', help="Imagenes del producto en Tienda Nube", copy=True)
     # stock_ilimitado_tn
@@ -250,6 +250,22 @@ class TiendaNubeProductTemplateInherit(models.Model):
             if len(archived) == 1:
                 return archived
         return self.env['product.product']
+
+    # Campos compute/inverse TN que deben propagarse a la variante al crear el template
+    # (necesario para que la importación por plantilla no pierda los valores:
+    # el inverse corre antes de que existan las variantes)
+    def _get_related_fields_variant_template(self):
+        return super()._get_related_fields_variant_template() + [
+            'stock_ilimitado_tn',
+            'precio_promocional_tn',
+            'alto_tn',
+            'ancho_tn',
+            'profundidad_tn',
+            'peso_tn',
+            'mpn_tn',
+            'rango_edad_tn',
+            'sexo_tn',
+        ]
 
     # Sobreescribimos unlink para que no se pueda borrar producto de descuento de Tienda Nube
     def unlink(self):
