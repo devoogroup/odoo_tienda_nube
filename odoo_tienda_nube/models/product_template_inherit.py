@@ -58,13 +58,12 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.stock_ilimitado_tn = archived_variants.stock_ilimitado_tn
     def _set_stock_ilimitado_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.stock_ilimitado_tn = self.stock_ilimitado_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.stock_ilimitado_tn = self.stock_ilimitado_tn
+        # Iteramos registro por registro: en importaciones el ORM agrupa los inverse
+        # y self puede traer varios templates a la vez
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.stock_ilimitado_tn = template.stock_ilimitado_tn
     # precio_promocional_tn
     @api.depends('product_variant_ids.precio_promocional_tn')
     def _compute_precio_promocional_tn(self):
@@ -78,13 +77,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.precio_promocional_tn = archived_variants.precio_promocional_tn
     def _set_precio_promocional_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.precio_promocional_tn = self.precio_promocional_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.precio_promocional_tn = self.precio_promocional_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.precio_promocional_tn = template.precio_promocional_tn
     # sexo_tn
     @api.depends('product_variant_ids.sexo_tn')
     def _compute_sexo_tn(self):
@@ -98,13 +94,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.sexo_tn = archived_variants.sexo_tn
     def _set_sexo_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.sexo_tn = self.sexo_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.sexo_tn = self.sexo_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.sexo_tn = template.sexo_tn
     # rango_edad_tn
     @api.depends('product_variant_ids.rango_edad_tn')
     def _compute_rango_edad_tn(self):
@@ -118,13 +111,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.rango_edad_tn = archived_variants.rango_edad_tn
     def _set_rango_edad_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.rango_edad_tn = self.rango_edad_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.rango_edad_tn = self.rango_edad_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.rango_edad_tn = template.rango_edad_tn
     # mpn_tn
     @api.depends('product_variant_ids.mpn_tn')
     def _compute_mpn_tn(self):
@@ -138,13 +128,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.mpn_tn = archived_variants.mpn_tn
     def _set_mpn_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.mpn_tn = self.mpn_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.mpn_tn = self.mpn_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.mpn_tn = template.mpn_tn
     # alto_tn
     @api.depends('product_variant_ids.alto_tn')
     def _compute_alto_tn(self):
@@ -158,13 +145,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.alto_tn = archived_variants.alto_tn
     def _set_alto_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.alto_tn = self.alto_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.alto_tn = self.alto_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.alto_tn = template.alto_tn
     #ancho_tn
     @api.depends('product_variant_ids.ancho_tn')
     def _compute_ancho_tn(self):
@@ -178,13 +162,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.ancho_tn = archived_variants.ancho_tn
     def _set_ancho_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.ancho_tn = self.ancho_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.ancho_tn = self.ancho_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.ancho_tn = template.ancho_tn
     #profundidad_tn
     @api.depends('product_variant_ids.profundidad_tn')
     def _compute_profundidad_tn(self):
@@ -198,13 +179,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.profundidad_tn = archived_variants.profundidad_tn
     def _set_profundidad_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.profundidad_tn = self.profundidad_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.profundidad_tn = self.profundidad_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.profundidad_tn = template.profundidad_tn
     #peso_tn
     @api.depends('product_variant_ids.peso_tn')
     def _compute_peso_tn(self):
@@ -218,13 +196,10 @@ class TiendaNubeProductTemplateInherit(models.Model):
                 if len(archived_variants) == 1:
                     template.peso_tn = archived_variants.peso_tn
     def _set_peso_tn(self):
-        variant_count = len(self.product_variant_ids)
-        if variant_count == 1:
-            self.product_variant_ids.peso_tn = self.peso_tn
-        elif variant_count == 0:
-            archived_variants = self.with_context(active_test=False).product_variant_ids
-            if len(archived_variants) == 1:
-                archived_variants.peso_tn = self.peso_tn
+        for template in self:
+            variant = template._get_single_variant()
+            if variant:
+                variant.peso_tn = template.peso_tn
 
     # product_id_tn
     @api.depends('product_variant_ids.product_id_tn')
