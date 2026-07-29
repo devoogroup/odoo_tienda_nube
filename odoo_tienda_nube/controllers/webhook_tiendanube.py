@@ -1,15 +1,28 @@
 # -*- coding: utf-8 -*-
 import logging
+import requests
 
 import odoo
 import json
-from odoo import http
+from odoo import _, http
 from odoo.http import request
 
 _logger = logging.getLogger(__name__)
 CORS = '*'
 
 class TiendaNubeWebHook(http.Controller):
+
+    def _fetch_order_json_tn(self, company, order_id):
+        """Consulta el JSON actual de una orden en la API de TN (sin aggregates)."""
+        try:
+            url = "https://api.tiendanube.com/v1/%s/orders/%s" % (company.tiendanube_id, order_id)
+            response = requests.get(url, headers=company.get_headers_tn())
+            if response.status_code == 200:
+                return response.json()
+            _logger.warning('[Webhook TN] TN respondió %s al consultar orden id=%s', response.status_code, order_id)
+        except Exception as e:
+            _logger.warning('[Webhook TN] Error consultando JSON orden %s: %s', order_id, e)
+        return None
 
     # https://tiendanube.github.io/api-documentation/resources/webhook#rules-for-deduplication
     # verificamos segun 3 segundos de diferencia en creacion del ultimo webhook igual
@@ -176,6 +189,17 @@ class TiendaNubeWebHook(http.Controller):
                                 'name': 'Orden TN id: ' + str(data['id']),
                             })
                             order.sudo().with_company(company_id).create_order_from_tn()
+                        elif order.state == 'draft':
+                            order_json = self._fetch_order_json_tn(company_id or order.company_id, data['id'])
+                            order.sudo()._tn_refresh_order_json(order_json)
+                            order.sudo().with_company(company_id)._confirm_from_tn_paid()
+                            if order.state == 'sale' and hasattr(order, '_tn_apply_payment_config'):
+                                order.sudo().with_company(company_id)._tn_apply_payment_config()
+                        else:
+                            # Orden ya confirmada: solo refrescamos el json (idempotencia ante reintentos de TN)
+                            order_json = self._fetch_order_json_tn(company_id or order.company_id, data['id'])
+                            order.sudo()._tn_refresh_order_json(order_json)
+                            order.sudo().message_post(body=_("Webhook order/paid recibido. La orden ya estaba confirmada (state=%s).") % order.state)
                         exitoso = True
 
                     #order/cancelled
@@ -184,17 +208,8 @@ class TiendaNubeWebHook(http.Controller):
                             ('id_tn','=',data['id'])
                             ],limit=1)
                         if order:
-                            if order.state == 'draft':
-                                order.sudo().action_cancel()
-                            elif order.state == 'sale':
-                                order.sudo().action_cancel()
-                            request.env['tn.log'].sudo().create_log(
-                                'Orden %s cancelada desde Tienda Nube' % order.name,
-                                'Orden cancelada por webhook order/cancelled',
-                                'sale.order',
-                                order.id,
-                                'info',
-                            )
+                            order_json = self._fetch_order_json_tn(company_id or order.company_id, data['id'])
+                            order.sudo().with_company(company_id)._tn_handle_order_cancelled(order_json)
                         exitoso = True
 
                 if exitoso:

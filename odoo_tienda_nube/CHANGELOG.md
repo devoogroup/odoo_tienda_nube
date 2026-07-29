@@ -1,5 +1,22 @@
 # Changelog — Tienda Nube ⇆ Odoo Connector
 
+## [18.0.7.1.0] - 2026-07-29
+
+### Added
+
+- Framework de confirmación automática de órdenes TN vía `tn_confirmation_mode` (Nunca / Solo si está pagada / Siempre) en `res.company`, con hooks `_tn_should_auto_confirm`, `_tn_confirm_message`, `_tn_pending_message` y `_confirm_from_tn_paid` para que otros módulos puedan sobreescribir el criterio de confirmación (reemplaza al booleano `tn_config_confirmation_sale`, que se mantiene en el modelo sin usar para no perder datos existentes — hay migración que preserva la configuración previa).
+- Hook `_tn_after_order_import(order)`, llamado explícitamente al final de `create_order_from_tn` (propio y de variantes como multi-store) para que módulos de descuento de gateway, estado de orden o facturación/pago automática se ejecuten siempre tras importar/confirmar una orden.
+- Hook `_tn_handle_order_cancelled` con comportamiento por defecto (cancela la orden si está en borrador o confirmada), extensible por otros módulos.
+
+### Changed
+
+- El webhook `order/paid` ahora distingue si la orden ya existe: si está en borrador la confirma según el modo configurado; si ya estaba confirmada, refresca los datos de TN y vuelve a aplicar la configuración de pago (útil para reintentos, es idempotente).
+- El webhook `order/cancelled` pasa a delegar en `_tn_handle_order_cancelled` en vez de cancelar la orden directamente.
+
+### Removed
+
+- Se quita el descuento de medio de pago (gateway) inline de `create_order_from_tn` — pasa a implementarse como módulo aparte (`tn_gateway_discount`) enganchado al hook `_tn_after_order_import`.
+
 ## [18.0.7.0.5] - 2026-04-22
 
 ### Added

@@ -55,9 +55,14 @@ class SaleOrderTiendaNubeInherit(models.Model):
 
     coupon_tn_ids = fields.Many2many('coupon.tn', string='Cupones Tienda Nube', help="Cupones de Tienda Nube", readonly=True)
     promotions_applied_tn = fields.Text('Promociones aplicadas', help="Promociones aplicadas de Tienda Nube", copy=False)
-    discount_gateway_tn = fields.Char('Descuento por medio de pago', help="Descuento por medio de pago de Tienda Nube", copy=False, readonly=True)
 
     json_tn = fields.Text('JSON Tienda Nube', help="JSON de Tienda Nube", copy=False)
+    tn_has_missing_products = fields.Boolean(
+        string='Productos TN faltantes',
+        default=False,
+        copy=False,
+        help="Reservado para uso futuro por módulos de detección de productos faltantes.",
+    )
 
     # Metodo para crear la orden en Odoo desde TN GET /orders/{id}
     def create_order_from_tn(self):
@@ -221,9 +226,8 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 # DESCUENTOS
                 has_coupon = len(order['coupon']) > 0
                 has_promotions = len(order['promotional_discount']['promotions_applied']) > 0
-                has_gateway_discount = order.get('discount_gateway') and float(order['discount_gateway']) > 0
 
-                if has_coupon or has_promotions or has_gateway_discount:
+                if has_coupon or has_promotions:
                     product_discount_tn = self.env.ref('odoo_tienda_nube.product_discount_tn')
                     if not product_discount_tn:
                         raise ValidationError(_("Producto de descuento no encontrado en Odoo"))
@@ -286,23 +290,6 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 'price_unit': discount_promo_amount,
                             })
 
-                    # Verificamos por descuento de medio de pago (gateway)
-                    if has_gateway_discount:
-                        gateway_name = order.get('gateway_name') or order.get('gateway') or 'Medio de pago'
-                        self.discount_gateway_tn = gateway_name + ': $' + order['discount_gateway']
-                        discount_gateway_amount = float(order['discount_gateway'])
-                        if self.company_id.tn_type_tax == 'not_included':
-                            value_tax = (((product_discount_tn.taxes_id.compute_all(discount_gateway_amount)['total_included']) * 100) / (product_discount_tn.taxes_id.compute_all(discount_gateway_amount)['total_excluded'])) / 100
-                            if value_tax:
-                                discount_gateway_amount = discount_gateway_amount / value_tax
-                        self.env['sale.order.line'].create({
-                            'name': 'Descuento por medio de pago (' + gateway_name + ')',
-                            'order_id': self.id,
-                            'product_id': product_discount_tn.id,
-                            'product_uom_qty': -1,
-                            'price_unit': discount_gateway_amount,
-                        })
-                            
                 # ENVIO
                 product_shipping_tn = self.env.ref('odoo_tienda_nube.product_shipping_tn')
                 if not product_shipping_tn:
@@ -331,17 +318,95 @@ class SaleOrderTiendaNubeInherit(models.Model):
                     self.warehouse_id = warehouse_id.id
 
                 # Verificamos si debemos confirmar la orden
-                if self.company_id.tn_config_confirmation_sale:
+                if self._tn_should_auto_confirm(order):
                     self.action_confirm()
+                    self.message_post(body=self._tn_confirm_message(order))
+                else:
+                    self.message_post(body=self._tn_pending_message(order))
 
                 # Creamos un log
                 self.env['tn.log'].create_log('Orden de venta {0} creada'.format(self.name), 'Orden de Venta creada desde Tienda Nube', 'sale.order', self.id, 'success')
+
+                # Hook de post-procesamiento (descuento gateway, estado TN, facturación/pago, etc.)
+                self._tn_after_order_import(order)
             else:
                 # Creamos un log
                 self.env['tn.log'].create_log('No se pudo crear Orden de Venta', 'Error al obtener orden de Tienda Nube', 'sale.order', self.id, 'error', response.text)
         except Exception as e:
             # Creamos un log
             self.env['tn.log'].create_log('No se pudo crear Orden de Venta', str(e), 'sale.order', self.id, 'error')
+
+    def _tn_should_auto_confirm(self, order):
+        """Hook: devuelve True si la orden debe confirmarse automáticamente.
+        Sobreescribible por módulos que agreguen nuevos modos de confirmación."""
+        mode = self.company_id.tn_confirmation_mode
+        payment_status = order.get('payment_status')
+        return mode == 'always' or (mode == 'paid' and payment_status == 'paid')
+
+    def _tn_confirm_message(self, order):
+        """Hook: mensaje de chatter cuando la orden se confirma automáticamente."""
+        return _("Orden confirmada automáticamente desde Tienda Nube (payment_status: %s).") % (order.get('payment_status') or '-')
+
+    def _tn_pending_message(self, order):
+        """Hook: mensaje de chatter cuando la orden queda en borrador."""
+        return _("Orden recibida desde Tienda Nube. Estado de pago: %s. Pendiente de confirmación.") % (order.get('payment_status') or '-')
+
+    def _tn_refresh_order_json(self, order_json):
+        """Actualiza json_tn con datos frescos de TN. Extensible para sincronizar campos adicionales."""
+        if order_json and order_json.get('number'):
+            self.write({'json_tn': str(order_json)})
+
+    def _tn_mark_for_payment_polling(self, order_json=None):
+        """Hook: marcar orden para polling de estado de pago. Implementar en módulos de pago."""
+        pass
+
+    def _tn_handle_order_cancelled(self, order_json=None):
+        """Hook: manejar webhook order/cancelled. Comportamiento por defecto: cancela la
+        orden si está en borrador o confirmada (preserva el comportamiento histórico)."""
+        self.ensure_one()
+        if self.state in ('draft', 'sale'):
+            self.action_cancel()
+        self.env['tn.log'].create_log(
+            'Orden %s cancelada desde Tienda Nube' % self.name,
+            'Orden cancelada por webhook order/cancelled',
+            'sale.order', self.id, 'info',
+        )
+
+    def _confirm_from_tn_paid(self):
+        """Procesa order/paid para una orden ya existente en borrador.
+        Solo confirma según el modo configurado, sin re-procesar líneas ni datos."""
+        self.ensure_one()
+        if self.tn_has_missing_products:
+            self.message_post(body=_(
+                "⚠ Pago recibido desde Tienda Nube, pero la orden permanece en borrador: "
+                "tiene productos no sincronizados con Odoo. "
+                "Sincronizar los productos y reprocesar la orden manualmente."
+            ))
+            return
+        mode = self.company_id.tn_confirmation_mode
+        if mode in ('always', 'paid'):
+            self.action_confirm()
+            self.message_post(body=_("Orden confirmada: pago recibido desde Tienda Nube (webhook order/paid)."))
+            self.env['tn.log'].create_log(
+                'Orden %s confirmada por pago TN' % self.name,
+                'Evento order/paid recibido — confirmación automática.',
+                'sale.order', self.id, 'success',
+            )
+        else:
+            self.message_post(body=_("Pago recibido desde Tienda Nube (webhook order/paid). La orden permanece en borrador según la configuración de confirmación."))
+            self.env['tn.log'].create_log(
+                'Pago TN recibido — orden %s en borrador' % self.name,
+                'Evento order/paid recibido. Modo "Nunca confirmar": la orden no se confirma automáticamente.',
+                'sale.order', self.id, 'success',
+            )
+
+    def _tn_after_order_import(self, order):
+        """Hook: post-procesamiento tras importar/confirmar una orden TN.
+        Se llama explícitamente por nombre (no vía super()) tanto desde este método como desde
+        la variante multi-store, para que módulos como tn_gateway_discount/tn_order_status/
+        tn_payment_config se ejecuten siempre, sin depender de cómo se resuelva la cadena de
+        create_order_from_tn. No-op en la base."""
+        pass
 
     _TN_BILLING_TYPE_TO_AFIP_CODE = {
         'Consumidor Final': '5',
