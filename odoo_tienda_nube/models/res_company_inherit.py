@@ -14,9 +14,9 @@ class TiendaNubeResCompanyInherit(models.Model):
     tiendanube_access_token = fields.Char('Tienda Nube Access Token', help="Token otorgado por Tienda Nube")
     tiendanube_id = fields.Char('Tienda Nube User ID', help="ID de Tienda Nube")
     tn_config_stock = fields.Selection([
-        ('stock', 'Stock en mano'),
+        ('stock', 'Stock disponible'),
         ('stock-price', 'Stock pronosticado'),
-    ], string='Configuracion de Stock', default='stock', help="Si es 'Stock en mano' se actualiza el stock en base a la cantidad en mano, si es 'Stock pronosticado' se actualiza el stock en base a la cantidad pronosticada")
+    ], string='Configuracion de Stock', default='stock', help="Si es 'Stock disponible' se actualiza el stock en base a la cantidad disponible, si es 'Stock pronosticado' se actualiza el stock en base a la cantidad pronosticada")
     tn_config_confirmation_sale = fields.Boolean('Confirmar venta', help="Si esta activo se confirma la venta al crear la orden de venta, sino se deja en estado borrador")
     tn_confirmation_mode = fields.Selection([
         ('never',  'Nunca confirmar'),
