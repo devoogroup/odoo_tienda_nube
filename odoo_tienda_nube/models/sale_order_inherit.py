@@ -257,17 +257,16 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 'end_date': coupon['end_date'],
                             })
                         self.coupon_tn_ids = [(4, coupon_tn.id)]
+                        # Decisión fiscal confirmada: los descuentos no llevan impuesto
+                        # (una línea negativa con IVA reduciría el IVA total de la factura).
                         discount_coupon_amount = float(order['discount_coupon'])
-                        if self.company_id.tn_type_tax == 'not_included':
-                            value_tax = (((product_discount_tn.taxes_id.compute_all(discount_coupon_amount)['total_included']) * 100) / (product_discount_tn.taxes_id.compute_all(discount_coupon_amount)['total_excluded'])) / 100
-                            if value_tax:
-                                discount_coupon_amount = discount_coupon_amount / value_tax
                         self.env['sale.order.line'].create({
                             'name': 'Descuento por cupón (' + coupon['code'] + ')',
                             'order_id': self.id,
                             'product_id': product_discount_tn.id,
                             'product_uom_qty': -1,
                             'price_unit': discount_coupon_amount,
+                            'tax_id': [(6, 0, [])],
                         })
 
                     # Verificamos por promociones aplicadas
@@ -278,16 +277,13 @@ class SaleOrderTiendaNubeInherit(models.Model):
                             else:
                                 self.promotions_applied_tn = "Tipo: " + promotions_applied['discount_script_type'] + " - Descuento: " + promotions_applied['total_discount_amount_short'] + "\n"
                             discount_promo_amount = float(promotions_applied['total_discount_amount'])
-                            if self.company_id.tn_type_tax == 'not_included':
-                                value_tax = (((product_discount_tn.taxes_id.compute_all(discount_promo_amount)['total_included']) * 100) / (product_discount_tn.taxes_id.compute_all(discount_promo_amount)['total_excluded'])) / 100
-                                if value_tax:
-                                    discount_promo_amount = discount_promo_amount / value_tax
                             self.env['sale.order.line'].create({
                                 'name': 'Promoción ' + promotions_applied['discount_script_type'],
                                 'order_id': self.id,
                                 'product_id': product_discount_tn.id,
                                 'product_uom_qty': -1,
                                 'price_unit': discount_promo_amount,
+                                'tax_id': [(6, 0, [])],
                             })
 
                 # ENVIO
