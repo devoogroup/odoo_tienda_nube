@@ -257,16 +257,23 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 'end_date': coupon['end_date'],
                             })
                         self.coupon_tn_ids = [(4, coupon_tn.id)]
-                        # Decisión fiscal confirmada: los descuentos no llevan impuesto
-                        # (una línea negativa con IVA reduciría el IVA total de la factura).
-                        discount_coupon_amount = float(order['discount_coupon'])
+                        # Ajuste fiscal confirmado: el monto que informa TN viene con 21%
+                        # de IVA incluido. Se divide por 1.21 para el precio unitario neto,
+                        # y la línea lleva el impuesto real del producto (mapeado por
+                        # posición fiscal) para que neto × 1.21 = valor real de TN.
+                        discount_taxes = product_discount_tn.taxes_id.filtered(
+                            lambda t: t.company_id == self.company_id
+                        )
+                        if self.fiscal_position_id:
+                            discount_taxes = self.fiscal_position_id.map_tax(discount_taxes)
+                        discount_coupon_amount = float(order['discount_coupon']) / 1.21
                         self.env['sale.order.line'].create({
                             'name': 'Descuento por cupón (' + coupon['code'] + ')',
                             'order_id': self.id,
                             'product_id': product_discount_tn.id,
                             'product_uom_qty': -1,
                             'price_unit': discount_coupon_amount,
-                            'tax_id': [(6, 0, [])],
+                            'tax_id': [(6, 0, discount_taxes.ids)],
                         })
 
                     # Verificamos por promociones aplicadas
@@ -276,14 +283,19 @@ class SaleOrderTiendaNubeInherit(models.Model):
                                 self.promotions_applied_tn += "Tipo: " + promotions_applied['discount_script_type'] + " - Descuento: " + promotions_applied['total_discount_amount_short'] + "\n"
                             else:
                                 self.promotions_applied_tn = "Tipo: " + promotions_applied['discount_script_type'] + " - Descuento: " + promotions_applied['total_discount_amount_short'] + "\n"
-                            discount_promo_amount = float(promotions_applied['total_discount_amount'])
+                            discount_taxes = product_discount_tn.taxes_id.filtered(
+                                lambda t: t.company_id == self.company_id
+                            )
+                            if self.fiscal_position_id:
+                                discount_taxes = self.fiscal_position_id.map_tax(discount_taxes)
+                            discount_promo_amount = float(promotions_applied['total_discount_amount']) / 1.21
                             self.env['sale.order.line'].create({
                                 'name': 'Promoción ' + promotions_applied['discount_script_type'],
                                 'order_id': self.id,
                                 'product_id': product_discount_tn.id,
                                 'product_uom_qty': -1,
                                 'price_unit': discount_promo_amount,
-                                'tax_id': [(6, 0, [])],
+                                'tax_id': [(6, 0, discount_taxes.ids)],
                             })
 
                 # ENVIO
