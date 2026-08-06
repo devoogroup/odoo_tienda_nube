@@ -790,7 +790,12 @@ class TiendaNubeResCompanyInherit(models.Model):
     def cron_sync_orders_today_tn(self):
         from datetime import date
         today = date.today()
-        self.get_orders_by_date_tn(today, today)
+        # with_company: el cron corre como un unico usuario (OdooBot) iterando
+        # varias companias; sin esto self.env.company queda fijo en la compania
+        # por defecto de ese usuario durante todo el loop, y los partners que se
+        # crean (via create_order_from_tn) terminan con el lang de la compania
+        # equivocada en vez de la de esta tienda.
+        self.with_company(self).get_orders_by_date_tn(today, today)
 
     # Metodo para traer Almacenes y Ubicaciones de Tienda Nube a Odoo
     def get_location_tn(self):
