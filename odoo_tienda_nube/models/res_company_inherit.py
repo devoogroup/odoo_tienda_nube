@@ -489,7 +489,21 @@ class TiendaNubeResCompanyInherit(models.Model):
                 "TN stock sync lote %d/%d → enviando: %s",
                 i + 1, len(batches), str(batch)[:500],
             )
-            response = requests.patch(url, headers=headers, json=batch)
+            try:
+                response = requests.patch(url, headers=headers, json=batch)
+            except requests.exceptions.RequestException as e:
+                _logger.error(
+                    "TN stock sync: fallo de red en lote %d/%d: %s", i + 1, len(batches), e,
+                )
+                self.env['tn.log'].sudo().create_log(
+                    name='Error de sincronización de stock TN',
+                    message='Fallo de red al actualizar stock (lote %d/%d): %s' % (i + 1, len(batches), e),
+                    model='res.company',
+                    model_id=self.id,
+                    level='error',
+                )
+                # Un lote con error no debe abortar el resto: seguimos con el siguiente
+                continue
             _logger.info(
                 "TN stock sync lote %d/%d → HTTP %s: %s",
                 i + 1, len(batches), response.status_code, response.text[:300],
@@ -501,7 +515,21 @@ class TiendaNubeResCompanyInherit(models.Model):
                     i + 1,
                 )
             elif response.status_code != 200:
-                raise ValidationError('Error al actualizar stock de Tienda Nube: %s' % response.text)
+                _logger.error(
+                    "TN stock sync: error HTTP %s en lote %d/%d: %s",
+                    response.status_code, i + 1, len(batches), response.text[:500],
+                )
+                self.env['tn.log'].sudo().create_log(
+                    name='Error de sincronización de stock TN',
+                    message='Error al actualizar stock de Tienda Nube (lote %d/%d): HTTP %s' % (
+                        i + 1, len(batches), response.status_code,
+                    ),
+                    model='res.company',
+                    model_id=self.id,
+                    level='error',
+                    error_tn=response.text[:2000],
+                )
+                # Un lote con error no debe abortar el resto: seguimos con el siguiente
 
     # Obtnenemos todas las categorias de Tienda Nube GET /categories
     def get_all_categories_tn(self):
