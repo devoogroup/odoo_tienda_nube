@@ -202,11 +202,12 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         order.get('billing_floor') or '',
                         order.get('billing_locality') or '',
                     ])
+                    customer = order.get('customer') or {}
                     partner_vals = {
-                        'name': order['customer']['name'] if 'customer' in order else order['contact_name'],
-                        'email': order['customer']['email'] if 'customer' in order else order['contact_email'],
-                        'phone': order['customer']['phone'] if 'customer' in order else order['contact_phone'],
-                        'vat': order['customer']['identification'] if 'customer' in order else order['contact_identification'],
+                        'name': customer.get('name') or order.get('contact_name'),
+                        'email': customer.get('email') or order.get('contact_email'),
+                        'phone': customer.get('phone') or order.get('contact_phone'),
+                        'vat': customer.get('identification') or order.get('contact_identification'),
                         'company_type': 'person',
                         'street': street,
                         'street2': ', '.join(_billing_street2_parts) or False,
@@ -234,6 +235,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 # Completamos lineas de la orden
                 self.tn_has_missing_products = False  # reset por si es un reprocesamiento
                 missing_lines = []
+                products_added = 0
                 for line in order['products']:
                     product = self.env['product.product'].search([('product_id_tn', '=', line['variant_id'])], limit=1)
 
@@ -252,6 +254,7 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         'product_uom_qty': float(line['quantity']),
                         'price_unit': price_unit,
                     })
+                    products_added += 1
                 if missing_lines:
                     _logger.warning(
                         '[TN] Orden %s: productos no encontrados en Odoo: %s',
@@ -364,6 +367,11 @@ class SaleOrderTiendaNubeInherit(models.Model):
                         "no están sincronizados con Odoo y fueron omitidos. "
                         "Sincronizar los productos y reprocesar la orden manualmente.\n\n%s"
                     ) % '\n'.join('• ' + p for p in missing_lines))
+                elif products_added == 0:
+                    self.message_post(body=_(
+                        "⚠ Orden en borrador: no se pudo importar ningún producto de esta orden "
+                        "de Tienda Nube. Revisar y reprocesar la orden manualmente."
+                    ))
                 elif self._tn_should_auto_confirm(order):
                     self.action_confirm()
                     self.message_post(body=self._tn_confirm_message(order))
@@ -414,6 +422,14 @@ class SaleOrderTiendaNubeInherit(models.Model):
                 "⚠ Pago recibido desde Tienda Nube, pero la orden permanece en borrador: "
                 "tiene productos no sincronizados con Odoo. "
                 "Sincronizar los productos y reprocesar la orden manualmente."
+            ))
+            return
+        has_product_lines = bool(self.order_line.filtered(lambda l: not l.display_type and l.product_id))
+        if not has_product_lines:
+            self.message_post(body=_(
+                "⚠ Pago recibido desde Tienda Nube, pero la orden permanece en borrador: "
+                "no tiene líneas de producto (probablemente falló su importación). "
+                "Revisar y reprocesar la orden manualmente."
             ))
             return
         mode = self.company_id.tn_confirmation_mode
